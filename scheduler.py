@@ -1,4 +1,3 @@
-# scheduler.py
 import time
 from bank_account import BankAccount
 from transaction import TransactionThread
@@ -15,17 +14,27 @@ class RoundRobinScheduler:
 
     def run(self):
         print("\n⚙️  Scheduler Starting...\n")
+
         while self.queue:
-            thread = self.queue.pop(0)      # Take first thread
+            thread = self.queue.pop(0)
 
             print(f"[CPU] ▶ Executing Thread {thread.thread_id} "
                   f"({thread.txn_type} ₹{thread.amount})")
 
-            thread.start()
-            thread.join(timeout=self.time_quantum)  # Run for time quantum
+            # Start thread if not already started
+            if not thread.is_alive():
+                thread.start()
+
+            # Run for time quantum
+            thread.join(timeout=self.time_quantum)
 
             self.context_switches += 1
             print(f"[CPU] ↔ Context Switch #{self.context_switches}\n")
+
+            # If thread still running, put it back
+            if thread.is_alive():
+                self.queue.append(thread)
+
             time.sleep(0.2)
 
         print(f"\n✅ All threads executed.")
@@ -50,3 +59,7 @@ def main():
 
     print("\nFinal Balance:", account.balance)
     account.print_log()
+
+
+if __name__ == "__main__":
+    main()
