@@ -1,4 +1,3 @@
-# bank_account.py
 import threading
 
 class BankAccount:
@@ -8,7 +7,7 @@ class BankAccount:
         self.lock = threading.Lock()
         self.log = []
 
-    # ✅ SAFE - with lock (Monitor)
+    # ✅ SAFE - with lock
     def deposit(self, amount):
         with self.lock:
             self.balance += amount
@@ -24,7 +23,7 @@ class BankAccount:
             else:
                 print(f"[{self.account_id}] ❌ Insufficient funds for ₹{amount}")
 
-    # ❌ UNSAFE - no lock (shows race condition)
+    # ❌ UNSAFE - no lock (for demo)
     def deposit_unsafe(self, amount):
         temp = self.balance
         temp += amount
