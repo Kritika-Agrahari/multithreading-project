@@ -1,16 +1,12 @@
-# 🏦 Real-Time Multithreaded Banking Transaction Simulator
+🏦 **Real-Time Multithreaded Banking Transaction Simulator**
 
 ---
 
 ## 📌 Project Overview
 
-This project simulates a real-world banking system where multiple users perform transactions like deposit and withdrawal at the same time.
+This project simulates a real-world banking system where multiple users perform transactions (deposit and withdrawal) concurrently.
 
-The goal is to demonstrate Operating System concepts such as:
-- Multithreading
-- CPU Scheduling
-- Synchronization
-- Critical Section Problem
+It demonstrates key **Operating System concepts** such as multithreading, CPU scheduling, synchronization, and thread lifecycle using an interactive GUI.
 
 ---
 
@@ -18,40 +14,112 @@ The goal is to demonstrate Operating System concepts such as:
 
 In a banking system, multiple users may try to access and modify the same account simultaneously.
 
-Without proper control, this can lead to:
-- Incorrect account balance
-- Data inconsistency
-- System errors
+Without proper synchronization, this can lead to:
+
+* Incorrect account balance
+* Race conditions
+* Data inconsistency
+
+This project solves these issues using thread synchronization and controlled scheduling.
 
 ---
 
 ## 🧠 Concepts Used
 
 ### 1. Multithreading
-Multiple threads execute transactions concurrently.
 
-### 2. Critical Section
-The part of code where shared resource (bank balance) is accessed.
+Multiple threads simulate concurrent user transactions.
 
-### 3. Race Condition
-Occurs when multiple threads modify shared data at the same time.
+### 2. CPU Scheduling (Round Robin)
 
-### 4. Synchronization (to be implemented later)
-Used to protect shared data using locks.
+Threads are executed using a **Round Robin scheduling algorithm** with a fixed time quantum.
+
+### 3. Thread Lifecycle
+
+Each thread transitions through states:
+
+```
+NEW → READY → RUNNING → TERMINATED
+```
+
+### 4. Critical Section
+
+The shared bank balance is a critical resource accessed by multiple threads.
+
+### 5. Synchronization (Mutex Lock)
+
+A lock is used to ensure only one thread modifies the balance at a time, preventing race conditions.
 
 ---
 
 ## 🏗️ Project Modules
 
-| Module | Description |
-|------|--------|
-| Module 1 | Thread creation and lifecycle |
-| Module 2 | Scheduler and CPU simulation |
-| Module 3 | Synchronization and bank account |
+| Module              | Description                                     |
+| ------------------- | ----------------------------------------------- |
+| Bank Account        | Handles balance operations with synchronization |
+| Transaction Threads | Represents concurrent transactions              |
+| Scheduler           | Implements Round Robin scheduling               |
+| GUI                 | Visualizes queue, states, logs, and execution   |
+| Gantt Chart         | Displays execution timeline                     |
+
+---
+
+## 🎨 Features
+
+* ✅ Multithreaded transaction processing
+* ✅ Round Robin scheduling simulation
+* ✅ Thread state visualization
+* ✅ Gantt chart (execution timeline)
+* ✅ Synchronization using locks
+* ✅ Real-time GUI updates
+* ✅ Context switch tracking
+
+---
+
+## 🖥️ GUI Components
+
+* 💰 Account Balance Display
+* 📋 Transaction Log
+* 🔄 Ready Queue
+* 🧠 Thread States
+* 📊 Gantt Chart
+* 🔁 Context Switch Counter
 
 ---
 
 ## 🚀 How to Run
 
+1. Open terminal in project folder
+2. Run:
+
 ```bash
-python main.py
+python ui_final.py
+```
+
+3. Click **Start Simulation** in the GUI
+
+---
+
+## 📊 Sample Output
+
+* Balance updates after each transaction
+* Threads executed in cyclic order
+* Gantt chart shows execution sequence
+* Context switches increase dynamically
+
+---
+
+## 🧠 Conclusion
+
+This project successfully demonstrates how operating systems handle concurrent processes, manage CPU scheduling, and ensure data consistency using synchronization.
+
+---
+
+## 🔮 Future Enhancements
+
+* User input for custom transactions
+* Deadlock detection visualization
+* Multiple scheduling algorithms (FCFS, Priority)
+* Web-based interface
+
+---
