@@ -1,72 +1,14 @@
 import tkinter as tk
-from tkinter import ttk
-import time
 import threading
 
 from bank_account import BankAccount
 from transaction import TransactionThread
+from scheduler import RoundRobinScheduler
 
-# GLOBAL ACCOUNT
 account = BankAccount("ACC123", 1000)
-
-class VisualScheduler:
-    def __init__(self, root):
-        self.queue = []
-        self.time_quantum = 1
-        self.root = root
-        self.context = 0
-
-    def add_thread(self, t):
-        self.queue.append(t)
-        update_queue_display()
-
-    def run(self):
-        def execute():
-            while self.queue:
-                thread = self.queue.pop(0)
-
-                current_label.config(
-                    text=f"Running: T{thread.thread_id} ({thread.txn_type})"
-                )
-
-                # start once
-                if not hasattr(thread, "started"):
-                    thread.start()
-                    thread.started = True
-
-                thread.join(timeout=self.time_quantum)
-
-                self.context += 1
-                context_label.config(text=f"Context Switches: {self.context}")
-
-                if thread.is_alive():
-                    self.queue.append(thread)
-
-                update_queue_display()
-                update_balance()
-                update_log()
-
-                time.sleep(1)
-
-            current_label.config(text="All tasks completed ✅")
-
-        threading.Thread(target=execute).start()
-
+scheduler = RoundRobinScheduler(1)
 
 # ---------- UI FUNCTIONS ----------
-
-def update_balance():
-    balance_label.config(text=f"Balance: ₹{account.balance}")
-
-def update_log():
-    log_box.delete(1.0, tk.END)
-    for entry in account.log:
-        log_box.insert(tk.END, entry + "\n")
-
-def update_queue_display():
-    queue_box.delete(1.0, tk.END)
-    for t in scheduler.queue:
-        queue_box.insert(tk.END, f"T{t.thread_id} → {t.txn_type}\n")
 
 def start_simulation():
     threads = [
@@ -78,66 +20,89 @@ def start_simulation():
     for t in threads:
         scheduler.add_thread(t)
 
-    scheduler.run()
+    threading.Thread(target=lambda: scheduler.run(update_ui)).start()
 
+def update_ui():
+    update_balance()
+    update_log()
+    update_queue()
+    update_states()
+    draw_gantt()
+    update_metrics()
+
+def update_balance():
+    balance_label.config(text=f"Balance: ₹{account.balance}")
+
+def update_log():
+    log_box.delete(1.0, tk.END)
+    for entry in account.log:
+        log_box.insert(tk.END, entry + "\n")
+
+def update_queue():
+    queue_box.delete(1.0, tk.END)
+    for t in scheduler.queue:
+        queue_box.insert(tk.END, f"T{t.thread_id}\n")
+
+def update_states():
+    state_box.delete(1.0, tk.END)
+    for t in scheduler.queue:
+        state_box.insert(tk.END, f"T{t.thread_id}: {t.state}\n")
+
+def draw_gantt():
+    canvas.delete("all")
+    x = 10
+    for t in scheduler.gantt:
+        canvas.create_rectangle(x, 20, x+50, 70, fill="skyblue")
+        canvas.create_text(x+25, 45, text=t)
+        x += 60
+
+def update_metrics():
+    metrics_label.config(
+        text=f"Context Switches: {scheduler.context}"
+    )
 
 # ---------- UI DESIGN ----------
 
 root = tk.Tk()
-root.title("💳 Banking Scheduler Simulator")
-root.geometry("800x600")
+root.title("💳 Advanced Banking Simulator")
+root.geometry("900x700")
 root.configure(bg="#1e1e2f")
 
-style = ttk.Style()
-style.theme_use("default")
-
-# Title
 title = tk.Label(root, text="Real-Time Banking Simulator",
                  font=("Arial", 20, "bold"), bg="#1e1e2f", fg="white")
 title.pack(pady=10)
 
-# Balance
 balance_label = tk.Label(root, text="Balance: ₹1000",
                          font=("Arial", 14), bg="#1e1e2f", fg="#00ffcc")
 balance_label.pack()
 
-# Current Thread
-current_label = tk.Label(root, text="Running: None",
-                         font=("Arial", 12), bg="#1e1e2f", fg="yellow")
-current_label.pack(pady=5)
-
-# Context Switch
-context_label = tk.Label(root, text="Context Switches: 0",
+metrics_label = tk.Label(root, text="Context Switches: 0",
                          font=("Arial", 12), bg="#1e1e2f", fg="orange")
-context_label.pack(pady=5)
+metrics_label.pack()
 
-# Frames
 frame = tk.Frame(root, bg="#1e1e2f")
 frame.pack(pady=10)
 
-# Queue box
-queue_frame = tk.LabelFrame(frame, text="Ready Queue",
-                            bg="#2a2a40", fg="white", padx=10, pady=10)
-queue_frame.grid(row=0, column=0, padx=10)
+# Queue
+queue_box = tk.Text(frame, width=20, height=10)
+queue_box.grid(row=0, column=0, padx=10)
 
-queue_box = tk.Text(queue_frame, width=20, height=10)
-queue_box.pack()
+# Log
+log_box = tk.Text(frame, width=40, height=10)
+log_box.grid(row=0, column=1, padx=10)
 
-# Log box
-log_frame = tk.LabelFrame(frame, text="Transaction Log",
-                          bg="#2a2a40", fg="white", padx=10, pady=10)
-log_frame.grid(row=0, column=1, padx=10)
+# States
+state_box = tk.Text(root, height=5, width=50)
+state_box.pack(pady=10)
 
-log_box = tk.Text(log_frame, width=40, height=10)
-log_box.pack()
+# Gantt Chart
+canvas = tk.Canvas(root, width=700, height=100, bg="white")
+canvas.pack(pady=10)
 
 # Button
-start_btn = tk.Button(root, text="▶ Start Simulation",
-                      command=start_simulation,
-                      bg="#00cc99", fg="black", font=("Arial", 12, "bold"))
-start_btn.pack(pady=20)
-
-# Scheduler
-scheduler = VisualScheduler(root)
+btn = tk.Button(root, text="▶ Start Simulation",
+                command=start_simulation,
+                bg="#00cc99", font=("Arial", 12, "bold"))
+btn.pack(pady=20)
 
 root.mainloop()
