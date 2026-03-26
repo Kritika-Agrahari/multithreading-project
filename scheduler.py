@@ -35,6 +35,8 @@ class RoundRobinScheduler:
 def main():
     account = BankAccount("ACC123", 1000)
 
+    scheduler = RoundRobinScheduler(time_quantum=1)
+
     threads = [
         TransactionThread(1, account, "deposit", 500),
         TransactionThread(2, account, "withdraw", 700),
@@ -42,13 +44,9 @@ def main():
     ]
 
     for t in threads:
-        t.start()
+        scheduler.add_thread(t)
 
-    for t in threads:
-        t.join()
+    scheduler.run()
 
-    print("Final Balance:", account.balance)
-
-
-if __name__ == "__main__":
-    main()
+    print("\nFinal Balance:", account.balance)
+    account.print_log()
