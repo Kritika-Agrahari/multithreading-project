@@ -8,16 +8,15 @@ class TransactionThread(threading.Thread):
         self.account = account
         self.txn_type = txn_type
         self.amount = amount
+        self.state = "NEW"
 
     def run(self):
-        print(f"[Thread {self.thread_id}] Started")
-
-        # ⏳ simulate execution time
+        self.state = "RUNNING"
         time.sleep(2)
 
         if self.txn_type == "deposit":
             self.account.deposit(self.amount)
-        elif self.txn_type == "withdraw":
+        else:
             self.account.withdraw(self.amount)
 
-        print(f"[Thread {self.thread_id}] Finished")
+        self.state = "TERMINATED"
