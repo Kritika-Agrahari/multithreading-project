@@ -1,5 +1,7 @@
 # scheduler.py
 import time
+from bank_account import BankAccount
+from transaction import TransactionThread
 
 class RoundRobinScheduler:
     def __init__(self, time_quantum=1):
@@ -28,3 +30,25 @@ class RoundRobinScheduler:
 
         print(f"\n✅ All threads executed.")
         print(f"📊 Total Context Switches: {self.context_switches}")
+
+
+def main():
+    account = BankAccount("ACC123", 1000)
+
+    threads = [
+        TransactionThread(1, account, "deposit", 500),
+        TransactionThread(2, account, "withdraw", 700),
+        TransactionThread(3, account, "withdraw", 300),
+    ]
+
+    for t in threads:
+        t.start()
+
+    for t in threads:
+        t.join()
+
+    print("Final Balance:", account.balance)
+
+
+if __name__ == "__main__":
+    main()
