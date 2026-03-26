@@ -1,4 +1,5 @@
 import threading
+import time
 
 class TransactionThread(threading.Thread):
     def __init__(self, thread_id, account, txn_type, amount):
@@ -10,6 +11,9 @@ class TransactionThread(threading.Thread):
 
     def run(self):
         print(f"[Thread {self.thread_id}] Started")
+
+        # ⏳ simulate execution time
+        time.sleep(2)
 
         if self.txn_type == "deposit":
             self.account.deposit(self.amount)
