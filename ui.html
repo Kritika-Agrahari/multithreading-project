@@ -65,6 +65,18 @@ body::before{
   position:sticky;top:0;z-index:100;
 }
 .topbar-left{display:flex;align-items:center;gap:16px;}
+.mobile-menu-btn{
+  display:none;
+  width:34px;height:34px;
+  border:1px solid var(--border2);
+  border-radius:3px;
+  background:var(--bg3);
+  color:var(--accent);
+  font-family:'JetBrains Mono',monospace;
+  font-size:16px;
+  cursor:pointer;
+}
+.mobile-menu-btn:hover{border-color:var(--accent);}
 .logo{
   font-family:'Syne',sans-serif;font-weight:800;font-size:18px;
   color:var(--accent);letter-spacing:-0.5px;
@@ -342,11 +354,33 @@ select.ctrl-input option{background:var(--panel);}
 }
 .tab:hover{color:var(--text);}
 .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab-account{display:none;}
 .tab-panel{display:none;flex:1;flex-direction:column;overflow:hidden;}
 .tab-panel.active{display:flex;}
+.mobile-dim{display:none;}
 
 /* ── RESPONSIVE ── */
-@media(max-width:900px){.main{grid-template-columns:1fr;}.topbar{padding:0 14px;}}
+@media(max-width:900px){
+  .topbar{padding:0 14px;}
+  .mobile-menu-btn{display:inline-flex;align-items:center;justify-content:center;}
+  .main{grid-template-columns:1fr;position:relative;gap:0;background:transparent;}
+  .col-left{display:none;position:fixed;top:52px;left:0;bottom:0;width:min(88vw,340px);z-index:260;border-right:1px solid var(--border);overflow-y:auto;}
+  .main.drawer-open .col-left{display:flex;}
+  .col-center{min-height:calc(100vh - 52px);}
+  .col-right{display:none;position:fixed;top:94px;left:0;right:0;bottom:0;z-index:240;overflow-y:auto;border-top:1px solid var(--border);}
+  .main.account-open .col-right{display:flex;}
+  .tab-account{display:inline-block;}
+  .mobile-dim{
+    display:none;
+    position:fixed;
+    inset:52px 0 0 0;
+    background:rgba(5,8,16,0.55);
+    border:none;
+    z-index:220;
+  }
+  .main.drawer-open + .mobile-dim,
+  .main.account-open + .mobile-dim{display:block;}
+}
 
 /* ── ANIMATIONS ── */
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
@@ -387,6 +421,7 @@ select.ctrl-input option{background:var(--panel);}
 <!-- TOPBAR -->
 <div class="topbar">
   <div class="topbar-left">
+    <button class="mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileDrawer()">☰</button>
     <div class="logo">BANK<span>OS</span></div>
     <div class="sys-badge">THREAD SIMULATOR v2.0</div>
   </div>
@@ -397,10 +432,10 @@ select.ctrl-input option{background:var(--panel);}
 </div>
 
 <!-- MAIN 3-COLUMN GRID -->
-<div class="main">
+<div class="main" id="mainLayout">
 
   <!-- ── LEFT COLUMN: CONTROLS ── -->
-  <div class="col">
+  <div class="col col-left">
     <div class="sec-head">
       <div class="sec-title">Control Panel</div>
       <div class="sec-badge">CONFIG</div>
@@ -475,11 +510,12 @@ select.ctrl-input option{background:var(--panel);}
   </div>
 
   <!-- ── CENTER COLUMN: MAIN VISUALIZER ── -->
-  <div class="col" style="overflow:hidden;">
+  <div class="col col-center" style="overflow:hidden;">
     <div class="tab-row">
       <button class="tab active" onclick="switchTab('scheduler',this)">SCHEDULER</button>
       <button class="tab" onclick="switchTab('sync',this)">SYNC DEMO</button>
       <button class="tab" onclick="switchTab('models',this)">THREAD MODELS</button>
+      <button class="tab tab-account" onclick="switchTab('account',this)">ACCOUNT</button>
     </div>
 
     <!-- TAB: SCHEDULER -->
@@ -634,7 +670,7 @@ select.ctrl-input option{background:var(--panel);}
   </div>
 
   <!-- ── RIGHT COLUMN: ACCOUNT + LOG ── -->
-  <div class="col">
+  <div class="col col-right">
     <div class="sec-head">
       <div class="sec-title">Account Monitor</div>
       <div class="sec-badge live" id="acctLiveBadge">LIVE</div>
@@ -699,6 +735,7 @@ select.ctrl-input option{background:var(--panel);}
   </div>
 
 </div><!-- /main -->
+<button class="mobile-dim" id="mobileDim" onclick="closeMobilePanels()" aria-label="Close mobile panels"></button>
 </div><!-- /shell -->
 
 <script>
@@ -716,6 +753,9 @@ let currentBalance = 5000;
 let initialBalance = 5000;
 let lockHeld = false;
 let ganttData = [];
+const ganttRowEl = document.getElementById('ganttRow');
+const ganttWrapEl = ganttRowEl.parentElement;
+let ganttIsInitialized = false;
 const THREAD_COLORS = ['#00d4ff','#a78bfa','#00ff88','#ffb300','#ff4060','#fbbf24'];
 const GANTT_CLASSES = ['gt1','gt2','gt3','gt4','gt5','gt6'];
 
@@ -805,21 +845,44 @@ function addTransaction(){
   }
 
   addLog(`Thread <span class="hi">T${id}</span> created — <span class="hi-${type==='deposit'?'green':'amber'}">${type.toUpperCase()} ₹${fmt(amount)}</span> | proc: ${ptime}ms`, 'scheduler');
-  renderThreadList();
+  appendThreadListItem(thread);
   renderQueue();
 }
 
-function renderThreadList(){
-  const el = document.getElementById('threadList');
-  if(!threads.length){el.innerHTML='<div style="font-size:11px;color:var(--muted);font-style:italic;">No threads yet — add transactions above.</div>';return;}
-  el.innerHTML = threads.map(t=>`
-    <div class="thread-item ${t.state.toLowerCase()}" id="ti-${t.id}">
+function createThreadListItemMarkup(t){
+  return `
+    <div class="thread-item ${t.state.toLowerCase()}" id="thread-item-T${t.id}">
       <div class="tid" style="background:${THREAD_COLORS[t.colorIdx]}22;color:${THREAD_COLORS[t.colorIdx]};border:1px solid ${THREAD_COLORS[t.colorIdx]}44;">T${t.id}</div>
       <div class="thread-info">
         <div class="thread-name">${t.type.toUpperCase()} ₹${fmt(t.amount)}</div>
         <div class="thread-sub">${t.processingTime}ms proc time</div>
       </div>
-      <div class="state-pill state-${t.state}">${t.state}</div>
+      <div class="state-pill state-${t.state}" id="thread-state-T${t.id}">${t.state}</div>
+    </div>
+  `;
+}
+
+function appendThreadListItem(thread){
+  const listEl = document.getElementById('threadList');
+  const emptyHint = listEl.querySelector('[data-thread-empty]');
+  if(emptyHint) emptyHint.remove();
+
+  const holder = document.createElement('div');
+  holder.innerHTML = createThreadListItemMarkup(thread).trim();
+  listEl.appendChild(holder.firstElementChild);
+}
+
+function renderThreadList(){
+  const el = document.getElementById('threadList');
+  if(!threads.length){el.innerHTML='<div data-thread-empty="1" style="font-size:11px;color:var(--muted);font-style:italic;">No threads yet — add transactions above.</div>';return;}
+  el.innerHTML = threads.map(t=>`
+    <div class="thread-item ${t.state.toLowerCase()}" id="thread-item-T${t.id}">
+      <div class="tid" style="background:${THREAD_COLORS[t.colorIdx]}22;color:${THREAD_COLORS[t.colorIdx]};border:1px solid ${THREAD_COLORS[t.colorIdx]}44;">T${t.id}</div>
+      <div class="thread-info">
+        <div class="thread-name">${t.type.toUpperCase()} ₹${fmt(t.amount)}</div>
+        <div class="thread-sub">${t.processingTime}ms proc time</div>
+      </div>
+      <div class="state-pill state-${t.state}" id="thread-state-T${t.id}">${t.state}</div>
     </div>
   `).join('');
 }
@@ -836,11 +899,12 @@ function renderQueue(){
 function updateThreadState(id, state){
   const t = threads.find(x=>x.id===id);
   if(t) t.state = state;
-  const el = document.getElementById(`ti-${id}`);
-  if(el){
-    el.className = `thread-item ${state.toLowerCase()}`;
-    el.querySelector('.state-pill').className = `state-pill state-${state}`;
-    el.querySelector('.state-pill').textContent = state;
+  const rowEl = document.getElementById(`thread-item-T${id}`);
+  const stateEl = document.getElementById(`thread-state-T${id}`);
+  if(rowEl && stateEl){
+    rowEl.className = `thread-item ${state.toLowerCase()}`;
+    stateEl.className = `state-pill state-${state}`;
+    stateEl.textContent = state;
   }
   updateMetrics();
   renderQueue();
@@ -851,33 +915,51 @@ function updateThreadState(id, state){
 // ──────────────────────────────────────────────────
 function addGanttCell(threadId, colorIdx){
   ganttData.push({threadId, colorIdx});
-  const row = document.getElementById('ganttRow');
-  if(ganttData.length===1) row.innerHTML='';
+  if(!ganttIsInitialized){
+    ganttRowEl.innerHTML = '';
+    ganttIsInitialized = true;
+  }
   const cell = document.createElement('div');
   cell.className = `gantt-cell ${GANTT_CLASSES[colorIdx]} fresh`;
   cell.textContent = `T${threadId}`;
-  row.appendChild(cell);
-  row.parentElement.scrollLeft = row.scrollWidth;
+  ganttRowEl.appendChild(cell);
+  ganttWrapEl.scrollLeft = ganttRowEl.scrollWidth;
 }
 
 // ──────────────────────────────────────────────────
 //  CPU PROGRESS BAR ANIMATION
 // ──────────────────────────────────────────────────
-function animateCpuProgress(durationMs, label){
+function animateCpuProgress(durationMs){
   const bar = document.getElementById('cpuProgress');
   const qlabel = document.getElementById('quantumLabel');
   const quantum = parseInt(document.getElementById('quantum').value)||600;
+  const stepPct = 5;
+  const tickMs = 30;
+
   bar.style.width = '0%';
-  const start = Date.now();
-  function tick(){
-    const elapsed = Date.now() - start;
-    const pct = Math.min(100, (elapsed/durationMs)*100);
-    bar.style.width = pct+'%';
-    qlabel.textContent = `${Math.min(elapsed,quantum)}ms / ${quantum}ms`;
-    if(elapsed < durationMs) requestAnimationFrame(tick);
-    else{ bar.style.width='100%'; }
-  }
-  requestAnimationFrame(tick);
+  qlabel.textContent = `0ms / ${quantum}ms`;
+
+  let widthPct = 0;
+  const startedAt = Date.now();
+  const timerId = setInterval(()=>{
+    widthPct = Math.min(100, widthPct + stepPct);
+    bar.style.width = widthPct + '%';
+
+    const elapsed = Math.min(Date.now() - startedAt, durationMs);
+    qlabel.textContent = `${elapsed}ms / ${quantum}ms`;
+
+    if(widthPct >= 100 || elapsed >= durationMs){
+      clearInterval(timerId);
+      bar.style.width = '100%';
+      qlabel.textContent = `${durationMs}ms / ${quantum}ms`;
+    }
+  }, tickMs);
+
+  return function stopCpuProgress(){
+    clearInterval(timerId);
+    bar.style.width = '100%';
+    qlabel.textContent = `${durationMs}ms / ${quantum}ms`;
+  };
 }
 
 // ──────────────────────────────────────────────────
@@ -892,7 +974,8 @@ async function startSimulation(){
   simStartTime = Date.now();
   currentBalance = initialBalance = parseInt(document.getElementById('initBalance').value)||5000;
   updateBalance(currentBalance, 0);
-  document.getElementById('ganttRow').innerHTML = '';
+  ganttRowEl.innerHTML = '';
+  ganttIsInitialized = true;
   ganttData = [];
   document.getElementById('runBtn').disabled = true;
   document.getElementById('runBtn').textContent = '⏳ RUNNING...';
@@ -917,13 +1000,15 @@ async function startSimulation(){
     addLog(`<span class="hi">T${t.id}</span> dispatched to CPU — <span class="hi-${t.type==='deposit'?'green':'amber'}">${t.type.toUpperCase()} ₹${fmt(t.amount)}</span>`, 'scheduler');
 
     const runTime = Math.min(quantum, t.processingTime - (t.elapsed||0));
-    animateCpuProgress(quantum, t.id);
+    const stopCpuProgress = animateCpuProgress(runTime);
     totalBusyMs += runTime;
     addGanttCell(t.id, t.colorIdx);
+    await sleep(50);
     contextSwitches++;
     updateMetrics();
 
     await sleep(runTime);
+    stopCpuProgress();
 
     t.elapsed = (t.elapsed||0) + quantum;
 
@@ -982,7 +1067,8 @@ function resetAll(){
   contextSwitches = 0; completedCount = 0; totalBusyMs = 0;
   currentBalance = parseInt(document.getElementById('initBalance').value)||5000;
   updateBalance(currentBalance,0);
-  document.getElementById('ganttRow').innerHTML='<div style="font-size:10px;color:var(--muted);padding:8px 0;font-style:italic;">Start simulation to see Gantt chart...</div>';
+  ganttRowEl.innerHTML='<div style="font-size:10px;color:var(--muted);padding:8px 0;font-style:italic;">Start simulation to see Gantt chart...</div>';
+  ganttIsInitialized = false;
   ganttData = [];
   document.getElementById('cpuThread').textContent='— IDLE —';
   document.getElementById('cpuProgress').style.width='0%';
@@ -1116,12 +1202,18 @@ const modelDescs = {
 };
 
 let selectedModel = '1-1';
+const modelButtonIds = {
+  '1-1': 'mb-11',
+  'many-1': 'mb-m1',
+  'many-many': 'mb-mm',
+};
+
 function selectModel(m){
   selectedModel=m;
   ['1-1','many-1','many-many'].forEach(k=>{
-    document.getElementById('mb-'+k.replace('-','')).classList.remove('sel');
+    document.getElementById(modelButtonIds[k]).classList.remove('sel');
   });
-  document.getElementById('mb-'+m.replace('-','')).classList.add('sel');
+  document.getElementById(modelButtonIds[m]).classList.add('sel');
   document.getElementById('modelDesc').textContent = modelDescs[m];
   drawModelDiagram(m);
 }
@@ -1188,7 +1280,11 @@ function drawModelDiagram(model){
 }
 
 document.getElementById('modelDesc').textContent = modelDescs['1-1'];
-setTimeout(()=>drawModelDiagram('1-1'), 100);
+if(document.fonts && document.fonts.ready){
+  document.fonts.ready.then(()=>drawModelDiagram('1-1'));
+} else {
+  drawModelDiagram('1-1');
+}
 
 // ──────────────────────────────────────────────────
 //  BENCHMARK
@@ -1230,13 +1326,48 @@ async function runModelBenchmark(){
 // ──────────────────────────────────────────────────
 //  TABS
 // ──────────────────────────────────────────────────
+function closeMobilePanels(){
+  document.getElementById('mainLayout').classList.remove('drawer-open','account-open');
+}
+
+function toggleMobileDrawer(){
+  if(window.innerWidth > 900) return;
+  const main = document.getElementById('mainLayout');
+  main.classList.remove('account-open');
+  main.classList.toggle('drawer-open');
+}
+
 function switchTab(name, btn){
+  const main = document.getElementById('mainLayout');
+  main.classList.remove('drawer-open');
+
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('tab-'+name).classList.add('active');
   btn.classList.add('active');
+
+  if(name==='account'){
+    if(window.innerWidth <= 900){
+      main.classList.add('account-open');
+    }
+    return;
+  }
+
+  main.classList.remove('account-open');
+  document.getElementById('tab-'+name).classList.add('active');
   if(name==='models') setTimeout(()=>drawModelDiagram(selectedModel),50);
 }
+
+window.addEventListener('resize', ()=>{
+  if(window.innerWidth > 900){
+    closeMobilePanels();
+    const accountTab = document.querySelector('.tab-account');
+    if(accountTab && accountTab.classList.contains('active')){
+      accountTab.classList.remove('active');
+      const schedulerTab = document.querySelector('.tab-row .tab');
+      if(schedulerTab) switchTab('scheduler', schedulerTab);
+    }
+  }
+});
 
 // ──────────────────────────────────────────────────
 //  INIT
