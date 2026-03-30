@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -24,6 +25,29 @@
   --glow:     0 0 20px rgba(0,212,255,0.15);
   --glow2:    0 0 40px rgba(0,212,255,0.08);
 }
+
+body.light {
+  --bg:       #f8f9fa;
+  --bg2:      #f0f2f5;
+  --bg3:      #e8ebf0;
+  --panel:    #ffffff;
+  --border:   #d0d8e8;
+  --border2:  #c0c8d8;
+  --accent:   #0088cc;
+  --accent2:  #6d28d9;
+  --green:    #00aa44;
+  --amber:    #ff8800;
+  --red:      #cc0033;
+  --text:     #1a1f35;
+  --muted:    #5a6a8a;
+  --muted2:   #9aa5c5;
+  --glow:     0 0 20px rgba(0,136,204,0.08);
+  --glow2:    0 0 40px rgba(0,136,204,0.04);
+}
+
+body.light::before{
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,0.04) 2px,rgba(255,255,255,0.04) 4px);
+}
 *{margin:0;padding:0;box-sizing:border-box;}
 html,body{height:100%;overflow-x:hidden;}
 body{
@@ -32,6 +56,7 @@ body{
   font-family:'JetBrains Mono',monospace;
   font-size:13px;
   line-height:1.5;
+  transition:background-color .3s, color .3s;
 }
 
 /* ── SCANLINE OVERLAY ── */
@@ -89,6 +114,106 @@ body::before{
   color:var(--accent);letter-spacing:1px;
 }
 .topbar-right{display:flex;align-items:center;gap:20px;}
+.theme-toggle{
+  background:none;
+  border:none;
+  font-size:16px;
+  cursor:pointer;
+  padding:4px 8px;
+  border-radius:4px;
+  transition:all .2s;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.theme-toggle:hover{
+  background:rgba(0,212,255,0.1);
+}
+body.light .theme-toggle:hover{
+  background:rgba(0,136,204,0.1);
+}
+
+/* ── HISTORY FEED ── */
+.history-feed{
+  flex:1;overflow-y:auto;padding:10px 14px;
+  display:flex;flex-direction:column;gap:8px;
+}
+
+.history-card{
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:4px;
+  padding:12px;
+  font-size:10px;
+  animation:history-slide .3s ease-out;
+}
+
+@keyframes history-slide{
+  from{
+    transform:translateY(8px);
+    opacity:0;
+  }
+  to{
+    transform:translateY(0);
+    opacity:1;
+  }
+}
+
+.history-card:hover{
+  border-color:var(--accent);
+  background:rgba(0,212,255,0.05);
+}
+
+body.light .history-card:hover{
+  border-color:var(--accent);
+  background:rgba(0,136,204,0.05);
+}
+
+.history-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:8px;
+  padding-bottom:8px;
+  border-bottom:1px solid var(--border2);
+}
+
+.history-run-num{
+  font-weight:700;
+  color:var(--text);
+  font-size:11px;
+}
+
+.history-time{
+  font-size:9px;
+  color:var(--muted);
+}
+
+.history-stat{
+  display:flex;
+  justify-content:space-between;
+  padding:4px 0;
+  color:var(--text);
+}
+
+.history-stat-label{
+  color:var(--muted);
+  margin-right:6px;
+}
+
+.history-stat-val{
+  font-weight:600;
+  font-family:'JetBrains Mono',monospace;
+  color:var(--accent);
+}
+
+.history-stat-val.balance{
+  color:var(--green);
+}
+
+.history-stat-val.failed{
+  color:var(--red);
+}
 .live-clock{color:var(--muted);font-size:12px;}
 .status-dot{
   width:7px;height:7px;border-radius:50%;
@@ -324,17 +449,79 @@ select.ctrl-input option{background:var(--panel);}
 .model-btn.sel{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,0.08);}
 
 /* ── QUEUE VISUALIZER ── */
-.queue-viz{display:flex;gap:4px;flex-wrap:wrap;min-height:40px;align-items:center;}
+.queue-viz{
+  display:flex;
+  gap:0;
+  flex-wrap:wrap;
+  min-height:46px;
+  align-items:center;
+  position:relative;
+}
+
+.queue-label{
+  font-size:8px;
+  font-weight:700;
+  color:var(--muted);
+  letter-spacing:1px;
+  text-transform:uppercase;
+  padding:0 6px;
+  flex-shrink:0;
+}
+
 .q-item{
   width:34px;height:34px;border-radius:3px;
   display:flex;align-items:center;justify-content:center;
   font-size:10px;font-weight:700;
   border:1px solid var(--border2);
   transition:all .3s;
-  animation:q-pop .25s cubic-bezier(.34,1.56,.64,1);
+  flex-shrink:0;
+  position:relative;
 }
-@keyframes q-pop{from{transform:scale(0);opacity:0;}to{transform:scale(1);opacity:1;}}
-.q-empty{font-size:10px;color:var(--muted);font-style:italic;}
+
+.q-item.sliding-in{
+  animation:q-slide-in .4s cubic-bezier(.34,1.56,.64,1);
+}
+
+.q-item.sliding-out{
+  animation:q-slide-out .4s cubic-bezier(.34,.6,.64,1);
+  pointer-events:none;
+}
+
+@keyframes q-slide-in{
+  from{
+    transform:translateX(-40px);
+    opacity:0;
+  }
+  to{
+    transform:translateX(0);
+    opacity:1;
+  }
+}
+
+@keyframes q-slide-out{
+  from{
+    transform:translateX(0);
+    opacity:1;
+  }
+  to{
+    transform:translateX(40px);
+    opacity:0;
+  }
+}
+
+.q-arrow{
+  font-size:14px;
+  color:var(--muted);
+  margin:0 2px;
+  flex-shrink:0;
+  opacity:0.6;
+  animation:arrow-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes arrow-pulse{
+  0%,100%{opacity:0.5;transform:translateX(0);}
+  50%{opacity:1;transform:translateX(2px);}
+}
 
 /* ── SYNC COMPARISON ── */
 .bar-compare{display:flex;flex-direction:column;gap:6px;}
@@ -412,6 +599,411 @@ select.ctrl-input option{background:var(--panel);}
 @keyframes flash-g{0%{background:rgba(0,255,136,0.15);}100%{background:transparent;}}
 .flash-red{animation:flash-r .4s ease-out;}
 @keyframes flash-r{0%{background:rgba(255,64,96,0.15);}100%{background:transparent;}}
+
+/* ── TOAST NOTIFICATIONS ── */
+.toast-container{
+  position:fixed;
+  bottom:24px;
+  right:24px;
+  z-index:10000;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  pointer-events:none;
+}
+
+.toast{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:12px 16px;
+  min-width:280px;
+  max-width:380px;
+  border-radius:4px;
+  font-size:12px;
+  font-weight:500;
+  font-family:'JetBrains Mono',monospace;
+  backdrop-filter:blur(12px);
+  border:1px solid;
+  box-shadow:0 8px 32px rgba(0,0,0,0.4);
+  animation:toast-slide-in .3s cubic-bezier(.34,1.56,.64,1) forwards;
+  pointer-events:auto;
+}
+
+@keyframes toast-slide-in{
+  from{
+    transform:translateX(400px);
+    opacity:0;
+  }
+  to{
+    transform:translateX(0);
+    opacity:1;
+  }
+}
+
+@keyframes toast-slide-out{
+  from{
+    transform:translateX(0);
+    opacity:1;
+  }
+  to{
+    transform:translateX(400px);
+    opacity:0;
+  }
+}
+
+.toast.dismissing{
+  animation:toast-slide-out .25s cubic-bezier(.34,.6,.64,1) forwards;
+}
+
+.toast-icon{
+  font-size:16px;
+  flex-shrink:0;
+}
+
+.toast-msg{
+  flex:1;
+  line-height:1.4;
+}
+
+.toast.success{
+  background:rgba(0,255,136,0.1);
+  border-color:rgba(0,255,136,0.3);
+  color:var(--green);
+}
+
+.toast.warning{
+  background:rgba(255,179,0,0.1);
+  border-color:rgba(255,179,0,0.3);
+  color:var(--amber);
+}
+
+.toast.error{
+  background:rgba(255,64,96,0.1);
+  border-color:rgba(255,64,96,0.3);
+  color:var(--red);
+}
+
+.toast.info{
+  background:rgba(0,212,255,0.1);
+  border-color:rgba(0,212,255,0.3);
+  color:var(--accent);
+}
+
+.toast-progress{
+  position:absolute;
+  bottom:0;
+  left:0;
+  height:2px;
+  background:currentColor;
+  border-radius:0 0 3px 0;
+  animation:toast-progress 3s linear forwards;
+}
+
+@keyframes toast-progress{
+  from{width:100%;}
+  to{width:0%;}
+}
+
+/* ── EMPTY STATES ── */
+.empty-state{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:32px 16px;
+  text-align:center;
+  color:var(--muted);
+  min-height:120px;
+}
+
+.empty-state.compact{
+  padding:20px 16px;
+  min-height:80px;
+}
+
+.empty-icon{
+  font-size:48px;
+  margin-bottom:12px;
+  opacity:0.6;
+  animation:float-icon 3s ease-in-out infinite;
+}
+
+.empty-state.compact .empty-icon{
+  font-size:32px;
+  margin-bottom:8px;
+}
+
+@keyframes float-icon{
+  0%,100%{transform:translateY(0px);}
+  50%{transform:translateY(-4px);}
+}
+
+.empty-title{
+  font-size:12px;
+  font-weight:700;
+  color:var(--text);
+  margin-bottom:4px;
+  letter-spacing:0.5px;
+}
+
+.empty-desc{
+  font-size:11px;
+  color:var(--muted);
+  line-height:1.5;
+  margin-bottom:8px;
+  max-width:280px;
+}
+
+.empty-hint{
+  font-size:10px;
+  color:var(--muted2);
+  display:flex;
+  align-items:center;
+  gap:4px;
+  margin-top:10px;
+  opacity:0.7;
+  animation:pulse-hint 2s ease-in-out infinite;
+}
+
+@keyframes pulse-hint{
+  0%,100%{opacity:0.5;}
+  50%{opacity:0.9;}
+}
+
+/* ── KEYBOARD SHORTCUTS ── */
+.shortcuts-overlay{
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(5,8,16,0.7);
+  backdrop-filter:blur(4px);
+  z-index:10001;
+  align-items:center;
+  justify-content:center;
+  animation:fade-in .2s ease-out;
+}
+
+.shortcuts-overlay.active{
+  display:flex;
+}
+
+@keyframes fade-in{
+  from{opacity:0;}
+  to{opacity:1;}
+}
+
+.shortcuts-panel{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:20px;
+  max-width:520px;
+  width:90vw;
+  max-height:80vh;
+  overflow-y:auto;
+  box-shadow:0 20px 60px rgba(0,0,0,0.6);
+  animation:panel-slide .3s cubic-bezier(.34,1.56,.64,1);
+}
+
+@keyframes panel-slide{
+  from{
+    transform:scale(0.95) translateY(-20px);
+    opacity:0;
+  }
+  to{
+    transform:scale(1) translateY(0);
+    opacity:1;
+  }
+}
+
+.shortcut-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:8px 0;
+  font-size:11px;
+}
+
+.shortcut-row kbd{
+  background:var(--bg3);
+  border:1px solid var(--border2);
+  border-radius:3px;
+  padding:3px 8px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  font-weight:600;
+  color:var(--accent);
+  min-width:45px;
+  text-align:center;
+  box-shadow:inset 0 0 4px rgba(0,212,255,0.1);
+}
+
+.shortcut-row span{
+  color:var(--text);
+  flex:1;
+}
+
+/* ── PAUSE STATE ── */
+body.sim-paused{
+  --pause-filter: blur(2px);
+}
+
+body.sim-paused .col-center{
+  position:relative;
+}
+
+body.sim-paused .col-center::after{
+  content:'';
+  position:absolute;
+  inset:0;
+  background:rgba(5,8,16,0.3);
+  pointer-events:none;
+  z-index:1;
+  animation:pause-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pause-pulse{
+  0%,100%{opacity:0.1;}
+  50%{opacity:0.25;}
+}
+
+body.sim-paused .gantt-cell,
+body.sim-paused .progress-fill,
+body.sim-paused .ring-circle,
+body.sim-paused .bar-fill,
+body.sim-paused .state-RUNNING{
+  animation-play-state:paused !important;
+}
+
+.pause-badge{
+  position:absolute;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  background:rgba(255,179,0,0.2);
+  border:2px solid var(--amber);
+  border-radius:6px;
+  padding:12px 20px;
+  font-size:13px;
+  font-weight:700;
+  color:var(--amber);
+  letter-spacing:1px;
+  z-index:2;
+  pointer-events:none;
+  animation:pause-badge-bounce .4s cubic-bezier(.34,1.56,.64,1);
+}
+
+@keyframes pause-badge-bounce{
+  from{
+    transform:translate(-50%,-50%) scale(0.8);
+    opacity:0;
+  }
+  to{
+    transform:translate(-50%,-50%) scale(1);
+    opacity:1;
+  }
+}
+
+/* ── THREAD TOOLTIP ── */
+.thread-tooltip{
+  position:fixed;
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:14px;
+  max-width:280px;
+  font-size:11px;
+  z-index:1000;
+  box-shadow:0 8px 24px rgba(0,0,0,0.5);
+  backdrop-filter:blur(8px);
+  pointer-events:none;
+  animation:tooltip-in .2s ease-out;
+}
+
+@keyframes tooltip-in{
+  from{
+    opacity:0;
+    transform:translateY(-4px);
+  }
+  to{
+    opacity:1;
+    transform:translateY(0);
+  }
+}
+
+.tooltip-header{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:10px;
+  padding-bottom:8px;
+  border-bottom:1px solid var(--border);
+}
+
+.tooltip-tid{
+  width:28px;
+  height:28px;
+  border-radius:2px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:700;
+  font-size:10px;
+  flex-shrink:0;
+}
+
+.tooltip-header-info{
+  flex:1;
+}
+
+.tooltip-type{
+  font-weight:700;
+  color:var(--text);
+  margin-bottom:2px;
+}
+
+.tooltip-amount{
+  font-size:10px;
+  color:var(--muted);
+}
+
+.tooltip-section{
+  margin-bottom:10px;
+  padding-bottom:8px;
+  border-bottom:1px solid var(--border2);
+}
+
+.tooltip-section:last-child{
+  margin-bottom:0;
+  padding-bottom:0;
+  border-bottom:none;
+}
+
+.tooltip-label{
+  font-size:9px;
+  color:var(--muted);
+  letter-spacing:0.5px;
+  text-transform:uppercase;
+  margin-bottom:4px;
+  opacity:0.7;
+}
+
+.tooltip-stat{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:4px 0;
+}
+
+.tooltip-stat-name{
+  color:var(--text);
+}
+
+.tooltip-stat-val{
+  font-weight:600;
+  color:var(--accent);
+  font-family:'JetBrains Mono',monospace;
+}
 </style>
 </head>
 <body>
@@ -426,6 +1018,7 @@ select.ctrl-input option{background:var(--panel);}
     <div class="sys-badge">THREAD SIMULATOR v2.0</div>
   </div>
   <div class="topbar-right">
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle dark/light mode">🌙</button>
     <div class="live-clock" id="clock">00:00:00</div>
     <div class="status-dot" id="statusDot"></div>
   </div>
@@ -475,6 +1068,14 @@ select.ctrl-input option{background:var(--panel);}
       <button class="btn btn-primary" onclick="addTransaction()" style="margin-top:4px;">+ ADD TO QUEUE</button>
     </div>
 
+    <!-- Presets -->
+    <div class="panel">
+      <div class="lbl" style="margin-bottom:10px;">Quick Presets</div>
+      <button class="btn btn-sm" onclick="loadPreset('basic')" style="width:100%;margin-bottom:6px;">BASIC</button>
+      <button class="btn btn-sm" onclick="loadPreset('race')" style="width:100%;margin-bottom:6px;">RACE DEMO</button>
+      <button class="btn btn-sm" onclick="loadPreset('deadlock')" style="width:100%;">DEADLOCK RISK</button>
+    </div>
+
     <!-- Scheduler Config -->
     <div class="panel">
       <div class="lbl" style="margin-bottom:10px;">Scheduler Config</div>
@@ -494,9 +1095,15 @@ select.ctrl-input option{background:var(--panel);}
 
     <!-- Simulation Controls -->
     <div class="panel">
-      <button class="btn btn-primary" id="runBtn" onclick="startSimulation()" style="margin-bottom:8px;">
-        ▶  RUN SIMULATION
-      </button>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button class="btn btn-primary" id="runBtn" onclick="startSimulation()" style="flex:1;position:relative;">
+          ▶  RUN SIMULATION
+          <span style="position:absolute;top:2px;right:6px;font-size:9px;background:rgba(0,212,255,0.2);padding:1px 4px;border-radius:2px;color:var(--accent);letter-spacing:0.5px;">SPACE</span>
+        </button>
+        <button class="btn btn-sm" onclick="toggleShortcuts()" style="padding:10px;width:34px;flex-shrink:0;" title="Keyboard Shortcuts (?)">
+          ⌨️
+        </button>
+      </div>
       <button class="btn btn-danger" onclick="resetAll()">↺  RESET</button>
     </div>
 
@@ -565,7 +1172,12 @@ select.ctrl-input option{background:var(--panel);}
         </div>
         <div class="gantt-wrap">
           <div class="gantt-row" id="ganttRow">
-            <div style="font-size:10px;color:var(--muted);padding:8px 0;font-style:italic;">Start simulation to see Gantt chart...</div>
+            <div class="empty-state compact">
+              <div class="empty-icon">📊</div>
+              <div class="empty-title">No Execution Yet</div>
+              <div class="empty-desc">Gantt chart displays thread execution timeline</div>
+              <div class="empty-hint">→ Run simulation to begin</div>
+            </div>
           </div>
         </div>
       </div>
@@ -581,7 +1193,12 @@ select.ctrl-input option{background:var(--panel);}
           </div>
         </div>
         <div id="threadList">
-          <div style="font-size:11px;color:var(--muted);font-style:italic;">No threads yet — add transactions above.</div>
+          <div class="empty-state">
+            <div class="empty-icon">⚙️</div>
+            <div class="empty-title">No Threads Yet</div>
+            <div class="empty-desc">Add transactions from the Control Panel to populate the ready queue.</div>
+            <div class="empty-hint">→ Add a transaction above</div>
+          </div>
         </div>
       </div>
     </div>
@@ -732,11 +1349,79 @@ select.ctrl-input option{background:var(--panel);}
         <div class="log-msg"><span class="hi">BankOS</span> kernel initialized. Awaiting transactions.</div>
       </div>
     </div>
+
+    <!-- Simulation History -->
+    <div class="sec-head">
+      <div class="sec-title">Run History</div>
+      <button class="btn-sm" onclick="clearHistory()">CLEAR</button>
+    </div>
+    <div class="history-feed" id="historyFeed">
+      <div class="empty-state compact">
+        <div class="empty-icon">📈</div>
+        <div class="empty-title">No Runs Yet</div>
+        <div class="empty-desc">Simulation history appears here</div>
+      </div>
+    </div>
   </div>
 
 </div><!-- /main -->
 <button class="mobile-dim" id="mobileDim" onclick="closeMobilePanels()" aria-label="Close mobile panels"></button>
 </div><!-- /shell -->
+
+<!-- SHORTCUTS PANEL -->
+<div id="shortcutsOverlay" class="shortcuts-overlay" onclick="if(event.target===this) toggleShortcuts();">
+  <div class="shortcuts-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:12px;">
+      <div style="font-size:13px;font-weight:700;color:var(--text);">⌨️ Keyboard Shortcuts</div>
+      <button style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0;" onclick="toggleShortcuts()">✕</button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div>
+        <div style="font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;text-transform:uppercase;">Simulation Control</div>
+        <div class="shortcut-row">
+          <kbd>SPACE</kbd>
+          <span>Start / Pause</span>
+        </div>
+        <div class="shortcut-row">
+          <kbd>R</kbd>
+          <span>Reset All</span>
+        </div>
+        <div class="shortcut-row">
+          <kbd>ESC</kbd>
+          <span>Cancel Running</span>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;text-transform:uppercase;">Navigation</div>
+        <div class="shortcut-row">
+          <kbd>1</kbd>
+          <span>Scheduler Tab</span>
+        </div>
+        <div class="shortcut-row">
+          <kbd>2</kbd>
+          <span>Sync Demo Tab</span>
+        </div>
+        <div class="shortcut-row">
+          <kbd>3</kbd>
+          <span>Thread Models Tab</span>
+        </div>
+      </div>
+
+      <div style="grid-column:1/-1;">
+        <div style="font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px;text-transform:uppercase;">Quick Actions</div>
+        <div class="shortcut-row">
+          <kbd>+</kbd>
+          <span>Add Default Transaction</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
 
 <script>
 // ──────────────────────────────────────────────────
@@ -745,14 +1430,21 @@ select.ctrl-input option{background:var(--panel);}
 let threads = [];
 let threadIdCounter = 1;
 let isRunning = false;
+let isPaused = false;
 let contextSwitches = 0;
 let completedCount = 0;
 let totalBusyMs = 0;
 let simStartTime = null;
+let pausedAt = null;
+let totalPausedMs = 0;
 let currentBalance = 5000;
 let initialBalance = 5000;
 let lockHeld = false;
 let ganttData = [];
+let threadPreemptions = {}; // Track preemption count per thread
+let threadStateLog = {}; // Track time in each state {threadId: {state: ms}}
+let threadStateEnteredAt = {}; // Track when thread entered current state
+let simulationHistory = []; // Track all simulation runs
 const ganttRowEl = document.getElementById('ganttRow');
 const ganttWrapEl = ganttRowEl.parentElement;
 let ganttIsInitialized = false;
@@ -788,6 +1480,145 @@ function addLog(msg, type='sys'){
 }
 
 function fmt(n){return Number(n).toLocaleString('en-IN');}
+
+function showToast(msg, type='info', duration=3000){
+  const container = document.getElementById('toastContainer');
+  const toastEl = document.createElement('div');
+  toastEl.className = `toast ${type}`;
+  
+  const icons = {
+    success: '✅',
+    warning: '⚠️',
+    error: '🔴',
+    info: '↔️'
+  };
+  
+  toastEl.innerHTML = `
+    <div class="toast-icon">${icons[type] || '•'}</div>
+    <div class="toast-msg">${msg}</div>
+    <div class="toast-progress"></div>
+  `;
+  
+  container.appendChild(toastEl);
+  
+  // Auto-dismiss after duration
+  const dismissTimer = setTimeout(()=>{
+    toastEl.classList.add('dismissing');
+    setTimeout(()=>toastEl.remove(), 250);
+  }, duration);
+  
+  // Allow manual dismiss on click
+  toastEl.addEventListener('click', ()=>{
+    clearTimeout(dismissTimer);
+    toastEl.classList.add('dismissing');
+    setTimeout(()=>toastEl.remove(), 250);
+  });
+}
+
+function createEmptyState(icon, title, desc, hint='', compact=false){
+  const compactClass = compact ? 'compact' : '';
+  return `
+    <div class="empty-state ${compactClass}">
+      <div class="empty-icon">${icon}</div>
+      <div class="empty-title">${title}</div>
+      <div class="empty-desc">${desc}</div>
+      ${hint ? `<div class="empty-hint">→ ${hint}</div>` : ''}
+    </div>
+  `;
+}
+
+// ──────────────────────────────────────────────────
+//  THREAD TOOLTIP
+// ──────────────────────────────────────────────────
+let currentTooltip = null;
+
+function showThreadTooltip(e, thread){
+  hideThreadTooltip();
+
+  const t = threads.find(x=>x.id===thread.id);
+  if(!t) return;
+
+  // Calculate state times
+  const stateTracker = threadStateLog[t.id] || {};
+  const now = Date.now();
+
+  const timeInNew = stateTracker['NEW'] || 0;
+  const timeInReady = stateTracker['READY'] || 0;
+  const timeInRunning = stateTracker['RUNNING'] || 0;
+  const timeInWaiting = stateTracker['WAITING'] || 0;
+
+  const preemptCount = threadPreemptions[t.id] || 0;
+
+  const tooltip = document.createElement('div');
+  tooltip.className = 'thread-tooltip';
+  tooltip.innerHTML = `
+    <div class="tooltip-header">
+      <div class="tooltip-tid" style="background:${THREAD_COLORS[t.colorIdx]}22;color:${THREAD_COLORS[t.colorIdx]};border:1px solid ${THREAD_COLORS[t.colorIdx]}44;">T${t.id}</div>
+      <div class="tooltip-header-info">
+        <div class="tooltip-type">${t.type.toUpperCase()}</div>
+        <div class="tooltip-amount">₹${fmt(t.amount)}</div>
+      </div>
+    </div>
+
+    <div class="tooltip-section">
+      <div class="tooltip-label">Transaction Details</div>
+      <div class="tooltip-stat">
+        <span class="tooltip-stat-name">Processing Time</span>
+        <span class="tooltip-stat-val">${t.processingTime}ms</span>
+      </div>
+      <div class="tooltip-stat">
+        <span class="tooltip-stat-name">Time Elapsed</span>
+        <span class="tooltip-stat-val">${(t.elapsed || 0)}ms</span>
+      </div>
+      <div class="tooltip-stat">
+        <span class="tooltip-stat-name">Status</span>
+        <span class="tooltip-stat-val" style="text-transform:uppercase;color:${
+          t.state === 'TERMINATED' ? 'var(--green)' :
+          t.state === 'RUNNING' ? 'var(--accent)' :
+          t.state === 'READY' ? 'var(--amber)' : 'var(--muted)'
+        }">${t.state}</span>
+      </div>
+    </div>
+
+    <div class="tooltip-section">
+      <div class="tooltip-label">Scheduling Info</div>
+      <div class="tooltip-stat">
+        <span class="tooltip-stat-name">Preemptions</span>
+        <span class="tooltip-stat-val">${preemptCount}</span>
+      </div>
+      <div class="tooltip-stat">
+        <span class="tooltip-stat-name">Time in READY</span>
+        <span class="tooltip-stat-val">${Math.round(timeInReady)}ms</span>
+      </div>
+      <div class="tooltip-stat">
+        <span class="tooltip-stat-name">Time in RUNNING</span>
+        <span class="tooltip-stat-val">${Math.round(timeInRunning)}ms</span>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(tooltip);
+  currentTooltip = tooltip;
+
+  // Position tooltip
+  const rect = e.target.closest('.thread-item').getBoundingClientRect();
+  let x = rect.right + 12;
+  let y = rect.top;
+
+  if(x + 280 > window.innerWidth){
+    x = rect.left - 12 - 280;
+  }
+
+  tooltip.style.left = Math.max(8, x) + 'px';
+  tooltip.style.top = y + 'px';
+}
+
+function hideThreadTooltip(){
+  if(currentTooltip){
+    currentTooltip.remove();
+    currentTooltip = null;
+  }
+}
 
 function updateBalance(newBal, delta=0){
   currentBalance = newBal;
@@ -849,6 +1680,72 @@ function addTransaction(){
   renderQueue();
 }
 
+function loadPreset(presetName){
+  if(isRunning){
+    addLog('Cannot load preset while simulation is running.','sys');
+    showToast('Simulation is running', 'warning', 2000);
+    return;
+  }
+
+  resetAll();
+
+  const presets = {
+    basic: [
+      {type:'deposit', amount:500, time:600},
+      {type:'deposit', amount:300, time:700},
+      {type:'withdraw', amount:200, time:500}
+    ],
+    race: Array(10).fill(null).map(() => ({
+      type:'deposit',
+      amount:100,
+      time:800
+    })),
+    deadlock: [
+      {type:'deposit', amount:500, time:1000},
+      {type:'withdraw', amount:250, time:900},
+      {type:'deposit', amount:300, time:1100},
+      {type:'withdraw', amount:400, time:950},
+      {type:'deposit', amount:150, time:850},
+      {type:'withdraw', amount:200, time:1050}
+    ]
+  };
+
+  const preset = presets[presetName];
+  const descriptions = {
+    basic: '3 simple transactions — good intro',
+    race: '10 threads on same account — watch for race conditions',
+    deadlock: '6 mixed deposits/withdrawals — resource conflict demo'
+  };
+
+  if(!preset) return;
+
+  // Add all transactions
+  preset.forEach(txn => {
+    const id = threadIdCounter++;
+    const thread = {
+      id,
+      type: txn.type,
+      amount: txn.amount,
+      processingTime: txn.time,
+      state: 'NEW',
+      colorIdx: (id-1)%6
+    };
+    threads.push(thread);
+    appendThreadListItem(thread);
+  });
+
+  // Set initial balance on first thread
+  if(threads.length > 0){
+    initialBalance = parseInt(document.getElementById('initBalance').value) || 5000;
+    currentBalance = initialBalance;
+    updateBalance(initialBalance, 0);
+  }
+
+  renderQueue();
+  addLog(`<span class="hi-amber">PRESET LOADED</span>: ${descriptions[presetName]}`, 'sys');
+  showToast(`Loaded: ${presetName.toUpperCase()}`, 'success', 2000);
+}
+
 function createThreadListItemMarkup(t){
   return `
     <div class="thread-item ${t.state.toLowerCase()}" id="thread-item-T${t.id}">
@@ -869,12 +1766,26 @@ function appendThreadListItem(thread){
 
   const holder = document.createElement('div');
   holder.innerHTML = createThreadListItemMarkup(thread).trim();
-  listEl.appendChild(holder.firstElementChild);
+  const item = holder.firstElementChild;
+
+  // Add tooltip listeners
+  item.addEventListener('mouseenter', (e)=>showThreadTooltip(e, thread));
+  item.addEventListener('mouseleave', hideThreadTooltip);
+
+  listEl.appendChild(item);
 }
 
 function renderThreadList(){
   const el = document.getElementById('threadList');
-  if(!threads.length){el.innerHTML='<div data-thread-empty="1" style="font-size:11px;color:var(--muted);font-style:italic;">No threads yet — add transactions above.</div>';return;}
+  if(!threads.length){
+    el.innerHTML = createEmptyState(
+      '⚙️',
+      'No Threads Yet',
+      'Add transactions from the Control Panel to populate the ready queue.',
+      'Add a transaction above'
+    );
+    return;
+  }
   el.innerHTML = threads.map(t=>`
     <div class="thread-item ${t.state.toLowerCase()}" id="thread-item-T${t.id}">
       <div class="tid" style="background:${THREAD_COLORS[t.colorIdx]}22;color:${THREAD_COLORS[t.colorIdx]};border:1px solid ${THREAD_COLORS[t.colorIdx]}44;">T${t.id}</div>
@@ -890,15 +1801,68 @@ function renderThreadList(){
 function renderQueue(){
   const qv = document.getElementById('queueViz');
   const ready = threads.filter(t=>t.state==='READY'||t.state==='NEW');
-  if(!ready.length){qv.innerHTML='<span class="q-empty">— empty —</span>';return;}
-  qv.innerHTML = ready.map(t=>`
-    <div class="q-item" style="background:${THREAD_COLORS[t.colorIdx]}18;border-color:${THREAD_COLORS[t.colorIdx]}44;color:${THREAD_COLORS[t.colorIdx]};">T${t.id}</div>
-  `).join('');
+  if(!ready.length){
+    qv.innerHTML = createEmptyState(
+      '📭',
+      'Queue Empty',
+      'Threads appear here when they\'re ready to run.',
+      'Run simulation to start',
+      true
+    );
+    return;
+  }
+
+  // Build queue with labels and arrows
+  const queueHTML = `
+    <div class="queue-label">FRONT</div>
+    ${ready.map((t, idx) => `
+      ${idx > 0 ? '<div class="q-arrow">→</div>' : ''}
+      <div class="q-item sliding-in" style="background:${THREAD_COLORS[t.colorIdx]}18;border-color:${THREAD_COLORS[t.colorIdx]}44;color:${THREAD_COLORS[t.colorIdx]};">T${t.id}</div>
+    `).join('')}
+    <div class="q-arrow">→</div>
+    <div class="queue-label">REAR</div>
+  `;
+
+  qv.innerHTML = queueHTML;
+}
+
+function removeThreadFromQueue(threadId){
+  const qv = document.getElementById('queueViz');
+  const items = qv.querySelectorAll('.q-item');
+  let found = false;
+
+  items.forEach(item => {
+    if(item.textContent === `T${threadId}`){
+      item.classList.remove('sliding-in');
+      item.classList.add('sliding-out');
+      found = true;
+      // Re-render after animation
+      setTimeout(() => renderQueue(), 400);
+    }
+  });
 }
 
 function updateThreadState(id, state){
   const t = threads.find(x=>x.id===id);
-  if(t) t.state = state;
+  if(t){
+    const oldState = t.state;
+    t.state = state;
+
+    // Track preemptions (when a thread goes from RUNNING back to READY)
+    if(oldState === 'RUNNING' && state === 'READY'){
+      threadPreemptions[id] = (threadPreemptions[id] || 0) + 1;
+    }
+
+    // Track time spent in states
+    if(threadStateEnteredAt[id]){
+      const timeInState = Date.now() - threadStateEnteredAt[id];
+      if(!threadStateLog[id]) threadStateLog[id] = {};
+      if(!threadStateLog[id][oldState]) threadStateLog[id][oldState] = 0;
+      threadStateLog[id][oldState] += timeInState;
+    }
+    threadStateEnteredAt[id] = Date.now();
+  }
+
   const rowEl = document.getElementById(`thread-item-T${id}`);
   const stateEl = document.getElementById(`thread-state-T${id}`);
   if(rowEl && stateEl){
@@ -908,6 +1872,61 @@ function updateThreadState(id, state){
   }
   updateMetrics();
   renderQueue();
+}
+
+// ──────────────────────────────────────────────────
+//  SIMULATION HISTORY
+// ──────────────────────────────────────────────────
+function renderHistory(){
+  const feed = document.getElementById('historyFeed');
+  if(!simulationHistory.length){
+    feed.innerHTML = createEmptyState(
+      '📈',
+      'No Runs Yet',
+      'Simulation history appears here',
+      '',
+      true
+    );
+    return;
+  }
+  feed.innerHTML = simulationHistory.map((run, idx)=>`
+    <div class="history-card" title="Run #${run.runNum}">
+      <div class="history-header">
+        <div class="history-run-num">Run #${run.runNum}</div>
+        <div class="history-time">${run.timestamp}</div>
+      </div>
+      <div class="history-stat">
+        <span class="history-stat-label">Final Balance</span>
+        <span class="history-stat-val balance">₹${fmt(run.finalBalance)}</span>
+      </div>
+      <div class="history-stat">
+        <span class="history-stat-label">Threads</span>
+        <span class="history-stat-val">${run.totalThreads}</span>
+      </div>
+      <div class="history-stat">
+        <span class="history-stat-label">Completed</span>
+        <span class="history-stat-val">${run.completedThreads}/${run.totalThreads}</span>
+      </div>
+      <div class="history-stat">
+        <span class="history-stat-label">Context Switches</span>
+        <span class="history-stat-val">${run.contextSwitches}</span>
+      </div>
+      <div class="history-stat">
+        <span class="history-stat-label">Time Taken</span>
+        <span class="history-stat-val">${(run.timeTaken/1000).toFixed(2)}s</span>
+      </div>
+    </div>
+  `).join('');
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function clearHistory(){
+  if(simulationHistory.length === 0) return;
+  if(confirm(`Clear all ${simulationHistory.length} run(s)?`)){
+    simulationHistory = [];
+    renderHistory();
+    showToast('History Cleared', 'info', 1500);
+  }
 }
 
 // ──────────────────────────────────────────────────
@@ -970,6 +1989,9 @@ async function startSimulation(){
   if(!threads.length){addLog('No threads in queue. Add transactions first.','sys');return;}
 
   isRunning = true;
+  isPaused = false;
+  pausedAt = null;
+  totalPausedMs = 0;
   contextSwitches = 0; completedCount = 0; totalBusyMs = 0;
   simStartTime = Date.now();
   currentBalance = initialBalance = parseInt(document.getElementById('initBalance').value)||5000;
@@ -977,8 +1999,9 @@ async function startSimulation(){
   ganttRowEl.innerHTML = '';
   ganttIsInitialized = true;
   ganttData = [];
-  document.getElementById('runBtn').disabled = true;
-  document.getElementById('runBtn').textContent = '⏳ RUNNING...';
+  document.getElementById('runBtn').disabled = false;
+  document.getElementById('runBtn').textContent = '⏸  PAUSE';
+  document.getElementById('runBtn').onclick = togglePauseSimulation;
 
   // Set all to READY
   threads.forEach(t=>updateThreadState(t.id,'READY'));
@@ -989,11 +2012,14 @@ async function startSimulation(){
   addLog(`Scheduler started — <span class="hi">Round Robin</span> | quantum: <span class="hi">${quantum}ms</span>`, 'scheduler');
 
   while(queue.length > 0){
+    await waitWhilePaused();
+
     const t = queue.shift();
     if(t.state === 'TERMINATED') continue;
 
     // RUNNING
     updateThreadState(t.id, 'RUNNING');
+    removeThreadFromQueue(t.id);
     document.getElementById('cpuThread').textContent = `T${t.id} — ${t.type.toUpperCase()} ₹${fmt(t.amount)}`;
     document.getElementById('lockStatus').textContent = 'HELD';
     document.getElementById('lockStatus').style.color = 'var(--amber)';
@@ -1004,10 +2030,15 @@ async function startSimulation(){
     totalBusyMs += runTime;
     addGanttCell(t.id, t.colorIdx);
     await sleep(50);
+    await waitWhilePaused();
+
     contextSwitches++;
+    showToast(`Context Switch #${contextSwitches}`, 'info', 1500);
     updateMetrics();
 
     await sleep(runTime);
+    await waitWhilePaused();
+
     stopCpuProgress();
 
     t.elapsed = (t.elapsed||0) + quantum;
@@ -1028,6 +2059,7 @@ async function startSimulation(){
         } else {
           success = false;
           addLog(`<span class="hi-red">FAILED</span> WITHDRAW ₹${fmt(t.amount)} — insufficient funds`, 'fail');
+          showToast('Insufficient Balance', 'warning', 2500);
         }
       }
       updateBalance(currentBalance, delta);
@@ -1043,31 +2075,100 @@ async function startSimulation(){
     document.getElementById('lockStatus').textContent = 'FREE';
     document.getElementById('lockStatus').style.color = 'var(--green)';
 
-    // CPU utilization
-    const elapsed = (Date.now() - simStartTime);
+    // CPU utilization (adjusted for paused time)
+    const elapsed = Date.now() - simStartTime - totalPausedMs;
     updateCpuRing(Math.min(95,(totalBusyMs/elapsed)*100));
     updateMetrics();
 
     await sleep(120);
+    await waitWhilePaused();
   }
 
   document.getElementById('cpuThread').textContent = '— IDLE —';
   isRunning = false;
+  isPaused = false;
   document.getElementById('runBtn').disabled = false;
   document.getElementById('runBtn').textContent = '▶  RUN SIMULATION';
+  document.getElementById('runBtn').onclick = startSimulation;
   addLog(`Simulation complete — <span class="hi-green">${completedCount} threads</span> finished | <span class="hi">${contextSwitches} context switches</span>`, 'sys');
+  showToast('Simulation Complete', 'success', 3000);
+
+  // Save to history
+  const timeTaken = Date.now() - simStartTime - totalPausedMs;
+  const historyEntry = {
+    runNum: simulationHistory.length + 1,
+    finalBalance: currentBalance,
+    totalThreads: threads.length,
+    contextSwitches: contextSwitches,
+    timeTaken: timeTaken,
+    timestamp: new Date().toLocaleTimeString('en-GB', {hour12: false}),
+    completedThreads: completedCount
+  };
+  simulationHistory.push(historyEntry);
+  renderHistory();
+
   updateMetrics();
 }
 
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
+async function waitWhilePaused(){
+  while(isPaused){
+    await sleep(50);
+  }
+}
+
+function togglePauseSimulation(){
+  if(!isRunning) return;
+
+  if(isPaused){
+    // RESUME
+    isPaused = false;
+    totalPausedMs += Date.now() - pausedAt;
+    document.getElementById('runBtn').textContent = '⏸  PAUSE';
+    document.body.classList.remove('sim-paused');
+    const badge = document.getElementById('pauseBadge');
+    if(badge) badge.remove();
+    addLog('Simulation <span class="hi-green">resumed</span>.', 'sys');
+    showToast('Simulation Resumed', 'success', 1500);
+  } else {
+    // PAUSE
+    isPaused = true;
+    pausedAt = Date.now();
+    document.getElementById('runBtn').textContent = '▶  RESUME';
+    document.body.classList.add('sim-paused');
+
+    // Add pause badge
+    const colCenter = document.querySelector('.col-center');
+    const badge = document.createElement('div');
+    badge.id = 'pauseBadge';
+    badge.className = 'pause-badge';
+    badge.textContent = '⏸  PAUSED';
+    colCenter.appendChild(badge);
+
+    addLog('Simulation <span class="hi-amber">paused</span>.', 'sys');
+    showToast('Simulation Paused', 'warning', 1500);
+  }
+}
+
 function resetAll(){
-  if(isRunning){ isRunning=false; }
+  if(isRunning){ isRunning=false; isPaused=false; }
   threads = []; threadIdCounter = 1;
   contextSwitches = 0; completedCount = 0; totalBusyMs = 0;
+  pausedAt = null; totalPausedMs = 0;
+  threadPreemptions = {};
+  threadStateLog = {};
+  threadStateEnteredAt = {};
   currentBalance = parseInt(document.getElementById('initBalance').value)||5000;
   updateBalance(currentBalance,0);
-  ganttRowEl.innerHTML='<div style="font-size:10px;color:var(--muted);padding:8px 0;font-style:italic;">Start simulation to see Gantt chart...</div>';
+  ganttRowEl.innerHTML = `
+    <div class="empty-state compact">
+      <div class="empty-icon">📊</div>
+      <div class="empty-title">No Execution Yet</div>
+      <div class="empty-desc">Gantt chart displays thread execution timeline</div>
+      <div class="empty-hint">→ Run simulation to begin</div>
+    </div>
+  `;
   ganttIsInitialized = false;
   ganttData = [];
   document.getElementById('cpuThread').textContent='— IDLE —';
@@ -1080,6 +2181,10 @@ function resetAll(){
   updateCpuRing(0);
   document.getElementById('runBtn').disabled=false;
   document.getElementById('runBtn').textContent='▶  RUN SIMULATION';
+  document.getElementById('runBtn').onclick=startSimulation;
+  document.body.classList.remove('sim-paused');
+  const badge = document.getElementById('pauseBadge');
+  if(badge) badge.remove();
   document.getElementById('logFeed').innerHTML='';
   addLog('<span class="hi">BankOS</span> reset. System ready.','sys');
 }
@@ -1185,6 +2290,10 @@ async function runSyncDemo(){
     unsafeResult < 2000
       ? `<span style="color:var(--red);">RACE CONDITION: ₹${lost} lost to overwrites.</span> Lock prevents this completely.`
       : `<span style="color:var(--amber);">Race condition non-deterministic — run again to see corruption.</span>`;
+  
+  if(unsafeResult < 2000){
+    showToast('Race Condition Detected', 'error', 3500);
+  }
 
   document.getElementById('safeSub').textContent='₹'+safeBalance+' — always correct';
   document.getElementById('unsafeSub').textContent='₹'+unsafeResult+' — may be wrong';
@@ -1370,10 +2479,129 @@ window.addEventListener('resize', ()=>{
 });
 
 // ──────────────────────────────────────────────────
+//  KEYBOARD SHORTCUTS
+// ──────────────────────────────────────────────────
+function toggleShortcuts(){
+  const overlay = document.getElementById('shortcutsOverlay');
+  overlay.classList.toggle('active');
+}
+
+document.addEventListener('keydown', (e)=>{
+  // Don't trigger shortcuts if user is typing in an input
+  if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  switch(e.code){
+    case 'Space':
+      e.preventDefault();
+      if(isRunning){
+        togglePauseSimulation();
+      } else {
+        startSimulation();
+      }
+      break;
+
+    case 'KeyR':
+      if(!e.ctrlKey && !e.altKey && !e.metaKey){
+        e.preventDefault();
+        resetAll();
+        showToast('System Reset', 'info', 1500);
+      }
+      break;
+
+    case 'Escape':
+      if(isRunning){
+        e.preventDefault();
+        isRunning = false;
+        isPaused = false;
+        document.getElementById('runBtn').disabled = false;
+        document.getElementById('runBtn').textContent = '▶  RUN SIMULATION';
+        document.getElementById('runBtn').onclick = startSimulation;
+        document.body.classList.remove('sim-paused');
+        addLog('Simulation cancelled.', 'sys');
+        showToast('Simulation Cancelled', 'warning', 2000);
+      } else {
+        toggleShortcuts();
+      }
+      break;
+
+    case 'Digit1':
+      if(!e.ctrlKey && !e.altKey && !e.metaKey){
+        e.preventDefault();
+        switchTab('scheduler', document.querySelectorAll('.tab')[0]);
+        showToast('Scheduler Tab', 'info', 1200);
+      }
+      break;
+
+    case 'Digit2':
+      if(!e.ctrlKey && !e.altKey && !e.metaKey){
+        e.preventDefault();
+        switchTab('sync', document.querySelectorAll('.tab')[1]);
+        showToast('Sync Demo Tab', 'info', 1200);
+      }
+      break;
+
+    case 'Digit3':
+      if(!e.ctrlKey && !e.altKey && !e.metaKey){
+        e.preventDefault();
+        switchTab('models', document.querySelectorAll('.tab')[2]);
+        showToast('Thread Models Tab', 'info', 1200);
+      }
+      break;
+
+    case 'Equal':
+    case 'Plus':
+      if(!e.ctrlKey && !e.altKey && !e.metaKey){
+        e.preventDefault();
+        addTransaction();
+        showToast('Transaction Added', 'success', 1500);
+      }
+      break;
+
+    case 'Slash':
+      if(e.ctrlKey || e.metaKey){
+        e.preventDefault();
+        toggleShortcuts();
+      }
+      break;
+  }
+});
+
+// ──────────────────────────────────────────────────
+//  THEME TOGGLE
+// ──────────────────────────────────────────────────
+function initTheme(){
+  const savedTheme = localStorage.getItem('bankos-theme') || 'dark';
+  applyTheme(savedTheme);
+}
+
+function applyTheme(theme){
+  const btn = document.getElementById('themeToggle');
+  if(theme === 'light'){
+    document.body.classList.add('light');
+    btn.textContent = '☀️';
+    btn.title = 'Switch to dark mode';
+  } else {
+    document.body.classList.remove('light');
+    btn.textContent = '🌙';
+    btn.title = 'Switch to light mode';
+  }
+  localStorage.setItem('bankos-theme', theme);
+}
+
+function toggleTheme(){
+  const currentTheme = document.body.classList.contains('light') ? 'light' : 'dark';
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  applyTheme(newTheme);
+  showToast(`${newTheme.charAt(0).toUpperCase() + newTheme.slice(1)} Mode`, 'info', 1500);
+}
+
+// ──────────────────────────────────────────────────
 //  INIT
 // ──────────────────────────────────────────────────
+initTheme();
 updateMetrics();
 updateCpuRing(0);
+renderHistory();
 </script>
 </body>
 </html>

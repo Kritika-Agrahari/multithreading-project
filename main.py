@@ -15,7 +15,7 @@ from bank_account import BankAccount
 from transaction_thread import TransactionThread
 from scheduler import RoundRobinScheduler
 from synchronization import run_all_sync_demos
-from thread_models import compare_models
+from thread_model import compare_models
 
 
 def demo_scheduler():
