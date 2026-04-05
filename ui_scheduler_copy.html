@@ -1085,6 +1085,10 @@ body.sim-paused .state-RUNNING{
         <div class="ctrl-label">Processing Time (ms)</div>
         <input class="ctrl-input" type="number" id="txnTime" value="800" />
       </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Priority (1 = Highest)</div>
+        <input class="ctrl-input" type="number" id="txnPriority" value="3" min="1" max="10" />
+      </div>
       <button class="btn btn-primary" onclick="addTransaction()" style="margin-top:4px;">+ ADD TO QUEUE</button>
     </div>
 
@@ -1100,7 +1104,15 @@ body.sim-paused .state-RUNNING{
     <div class="panel">
       <div class="lbl" style="margin-bottom:10px;">Scheduler Config</div>
       <div class="ctrl-row">
-        <div class="ctrl-label">Time Quantum (ms)</div>
+        <div class="ctrl-label">Algorithm</div>
+        <select class="ctrl-input" id="schedulerAlgo">
+          <option value="rr">ROUND ROBIN (Preemptive)</option>
+          <option value="srtf">SRTF - Shortest Remaining Time First</option>
+          <option value="priority">PRIORITY (Preemptive)</option>
+        </select>
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Time Slice / Quantum (ms)</div>
         <input class="ctrl-input" type="number" id="quantum" value="600" />
       </div>
     </div>
@@ -1154,7 +1166,7 @@ body.sim-paused .state-RUNNING{
                   <div class="progress-fill" id="cpuProgress" style="width:0%"></div>
                 </div>
                 <div style="display:flex;justify-content:space-between;">
-                  <span class="lbl">TIME QUANTUM</span>
+                  <span class="lbl">CURRENT CPU SLICE</span>
                   <span style="font-size:10px;color:var(--muted)" id="quantumLabel">0ms / 600ms</span>
                 </div>
               </div>
@@ -1466,6 +1478,56 @@ function addLog(msg, type='sys'){
 
 function fmt(n){return Number(n).toLocaleString('en-IN');}
 
+function getSelectedAlgorithm(){
+  return document.getElementById('schedulerAlgo')?.value || 'rr';
+}
+
+function getAlgorithmLabel(algo){
+  const labels = {
+    rr: 'Round Robin',
+    srtf: 'SRTF',
+    priority: 'Preemptive Priority'
+  };
+  return labels[algo] || 'Round Robin';
+}
+
+function getRemainingMs(thread){
+  return Math.max(0, thread.processingTime - (thread.elapsed || 0));
+}
+
+function getSliceDuration(thread, algorithm, quantum){
+  const remaining = getRemainingMs(thread);
+  if(algorithm === 'rr'){
+    return Math.min(quantum, remaining);
+  }
+  const baseSlice = Math.max(100, Math.floor(quantum / 3));
+  return Math.min(baseSlice, remaining);
+}
+
+function pickNextThread(algorithm, readyThreads){
+  if(!readyThreads.length) return null;
+
+  if(algorithm === 'srtf'){
+    return [...readyThreads].sort((a,b)=>{
+      const remDiff = getRemainingMs(a) - getRemainingMs(b);
+      if(remDiff !== 0) return remDiff;
+      return a.id - b.id;
+    })[0];
+  }
+
+  if(algorithm === 'priority'){
+    return [...readyThreads].sort((a,b)=>{
+      const pDiff = (a.priority || 5) - (b.priority || 5);
+      if(pDiff !== 0) return pDiff;
+      const remDiff = getRemainingMs(a) - getRemainingMs(b);
+      if(remDiff !== 0) return remDiff;
+      return a.id - b.id;
+    })[0];
+  }
+
+  return readyThreads[0];
+}
+
 function showToast(msg, type='info', duration=3000){
   const container = document.getElementById('toastContainer');
   const toastEl = document.createElement('div');
@@ -1525,7 +1587,6 @@ function showThreadTooltip(e, thread){
 
   // Calculate state times
   const stateTracker = threadStateLog[t.id] || {};
-  const now = Date.now();
 
   const timeInReady = stateTracker['READY'] || 0;
   const timeInRunning = stateTracker['RUNNING'] || 0;
@@ -1553,6 +1614,14 @@ function showThreadTooltip(e, thread){
       <div class="tooltip-stat">
         <span class="tooltip-stat-name">Time Elapsed</span>
         <span class="tooltip-stat-val">${(t.elapsed || 0)}ms</span>
+      </div>
+      <div class="tooltip-stat">
+        <span class="tooltip-stat-name">Remaining Time</span>
+        <span class="tooltip-stat-val">${getRemainingMs(t)}ms</span>
+      </div>
+      <div class="tooltip-stat">
+        <span class="tooltip-stat-name">Priority</span>
+        <span class="tooltip-stat-val">P${t.priority || 3}</span>
       </div>
       <div class="tooltip-stat">
         <span class="tooltip-stat-name">Status</span>
@@ -1647,9 +1716,11 @@ function addTransaction(){
   const type   = document.getElementById('txnType').value;
   const amount = parseInt(document.getElementById('txnAmount').value)||500;
   const ptime  = parseInt(document.getElementById('txnTime').value)||800;
+  const priorityInput = parseInt(document.getElementById('txnPriority').value);
+  const priority = Number.isFinite(priorityInput) ? Math.min(10, Math.max(1, priorityInput)) : 3;
   const id     = threadIdCounter++;
 
-  const thread = {id, type, amount, processingTime:ptime, state:'READY', colorIdx:(id-1)%6};
+  const thread = {id, type, amount, processingTime:ptime, priority, elapsed:0, state:'READY', colorIdx:(id-1)%6};
   threads.push(thread);
 
   // Set initial balance from UI on first thread
@@ -1659,7 +1730,7 @@ function addTransaction(){
     updateBalance(initialBalance, 0);
   }
 
-  addLog(`Thread <span class="hi">T${id}</span> created — <span class="hi-${type==='deposit'?'green':'amber'}">${type.toUpperCase()} ₹${fmt(amount)}</span> | proc: ${ptime}ms`, 'scheduler');
+  addLog(`Thread <span class="hi">T${id}</span> created — <span class="hi-${type==='deposit'?'green':'amber'}">${type.toUpperCase()} ₹${fmt(amount)}</span> | proc: ${ptime}ms | prio: P${priority}`, 'scheduler');
   appendThreadListItem(thread);
   renderQueue();
 }
@@ -1675,22 +1746,23 @@ function loadPreset(presetName){
 
   const presets = {
     basic: [
-      {type:'deposit', amount:500, time:600},
-      {type:'deposit', amount:300, time:700},
-      {type:'withdraw', amount:200, time:500}
+      {type:'deposit', amount:500, time:600, priority:3},
+      {type:'deposit', amount:300, time:700, priority:4},
+      {type:'withdraw', amount:200, time:500, priority:2}
     ],
     race: Array(10).fill(null).map(() => ({
       type:'deposit',
       amount:100,
-      time:800
+      time:800,
+      priority:3
     })),
     deadlock: [
-      {type:'deposit', amount:500, time:1000},
-      {type:'withdraw', amount:250, time:900},
-      {type:'deposit', amount:300, time:1100},
-      {type:'withdraw', amount:400, time:950},
-      {type:'deposit', amount:150, time:850},
-      {type:'withdraw', amount:200, time:1050}
+      {type:'deposit', amount:500, time:1000, priority:2},
+      {type:'withdraw', amount:250, time:900, priority:1},
+      {type:'deposit', amount:300, time:1100, priority:4},
+      {type:'withdraw', amount:400, time:950, priority:2},
+      {type:'deposit', amount:150, time:850, priority:5},
+      {type:'withdraw', amount:200, time:1050, priority:3}
     ]
   };
 
@@ -1711,6 +1783,8 @@ function loadPreset(presetName){
       type: txn.type,
       amount: txn.amount,
       processingTime: txn.time,
+      priority: txn.priority || 3,
+      elapsed: 0,
       state: 'READY',
       colorIdx: (id-1)%6
     };
@@ -1736,7 +1810,7 @@ function createThreadListItemMarkup(t){
       <div class="tid" style="background:${THREAD_COLORS[t.colorIdx]}22;color:${THREAD_COLORS[t.colorIdx]};border:1px solid ${THREAD_COLORS[t.colorIdx]}44;">T${t.id}</div>
       <div class="thread-info">
         <div class="thread-name">${t.type.toUpperCase()} ₹${fmt(t.amount)}</div>
-        <div class="thread-sub">${t.processingTime}ms proc time</div>
+        <div class="thread-sub">${t.processingTime}ms proc | P${t.priority || 3}</div>
       </div>
       <div class="state-pill state-${t.state}" id="thread-state-T${t.id}">${t.state}</div>
     </div>
@@ -1770,7 +1844,7 @@ function renderThreadList(){
       <div class="tid" style="background:${THREAD_COLORS[t.colorIdx]}22;color:${THREAD_COLORS[t.colorIdx]};border:1px solid ${THREAD_COLORS[t.colorIdx]}44;">T${t.id}</div>
       <div class="thread-info">
         <div class="thread-name">${t.type.toUpperCase()} ₹${fmt(t.amount)}</div>
-        <div class="thread-sub">${t.processingTime}ms proc time</div>
+        <div class="thread-sub">${t.processingTime}ms proc | P${t.priority || 3}</div>
       </div>
       <div class="state-pill state-${t.state}" id="thread-state-T${t.id}">${t.state}</div>
     </div>
@@ -1779,7 +1853,19 @@ function renderThreadList(){
 
 function renderQueue(){
   const qv = document.getElementById('queueViz');
+  const algorithm = getSelectedAlgorithm();
   const ready = threads.filter(t=>t.state==='READY');
+  const orderedReady = algorithm === 'rr' ? ready : [...ready].sort((a,b)=>{
+    if(algorithm === 'srtf'){
+      const remDiff = getRemainingMs(a) - getRemainingMs(b);
+      if(remDiff !== 0) return remDiff;
+      return a.id - b.id;
+    }
+    const pDiff = (a.priority || 5) - (b.priority || 5);
+    if(pDiff !== 0) return pDiff;
+    return a.id - b.id;
+  });
+
   if(!ready.length){
     qv.innerHTML = createEmptyState(
       '📭',
@@ -1794,7 +1880,7 @@ function renderQueue(){
   // Build queue with labels and arrows
   const queueHTML = `
     <div class="queue-label">FRONT</div>
-    ${ready.map((t, idx) => `
+    ${orderedReady.map((t, idx) => `
       ${idx > 0 ? '<div class="q-arrow">→</div>' : ''}
       <div class="q-item sliding-in" style="background:${THREAD_COLORS[t.colorIdx]}18;border-color:${THREAD_COLORS[t.colorIdx]}44;color:${THREAD_COLORS[t.colorIdx]};">T${t.id}</div>
     `).join('')}
@@ -1883,6 +1969,10 @@ function renderHistory(){
         <span class="history-stat-val">${run.totalThreads}</span>
       </div>
       <div class="history-stat">
+        <span class="history-stat-label">Algorithm</span>
+        <span class="history-stat-val">${run.algorithmLabel || 'Round Robin'}</span>
+      </div>
+      <div class="history-stat">
         <span class="history-stat-label">Completed</span>
         <span class="history-stat-val">${run.completedThreads}/${run.totalThreads}</span>
       </div>
@@ -1967,6 +2057,10 @@ async function startSimulation(){
   if(isRunning) return;
   if(!threads.length){addLog('No threads in queue. Add transactions first.','sys');return;}
 
+  const algorithm = getSelectedAlgorithm();
+  const algorithmLabel = getAlgorithmLabel(algorithm);
+  const quantum = parseInt(document.getElementById('quantum').value)||600;
+
   isRunning = true;
   isPaused = false;
   pausedAt = null;
@@ -1982,17 +2076,45 @@ async function startSimulation(){
   document.getElementById('runBtn').textContent = '⏸  PAUSE';
   document.getElementById('runBtn').onclick = togglePauseSimulation;
 
-  // Set all to READY
-  const quantum = parseInt(document.getElementById('quantum').value)||600;
-  const queue = [...threads];
+  // Reset thread runtime state for this run
+  threads.forEach(t=>{
+    t.state = 'READY';
+    t.elapsed = 0;
+  });
+  renderThreadList();
+  renderQueue();
 
-  addLog(`Scheduler started — <span class="hi">Round Robin</span> | quantum: <span class="hi">${quantum}ms</span>`, 'scheduler');
+  addLog(`Scheduler started — <span class="hi">${algorithmLabel}</span> | slice/quantum: <span class="hi">${quantum}ms</span>`, 'scheduler');
 
-  while(queue.length > 0){
+  let rrQueue = algorithm === 'rr' ? [...threads] : [];
+
+  while(isRunning){
     await waitWhilePaused();
 
-    const t = queue.shift();
-    if(t.state === 'DONE') continue;
+    const pendingThreads = threads.filter(t=>t.state !== 'DONE');
+    if(!pendingThreads.length) break;
+
+    let t = null;
+    if(algorithm === 'rr'){
+      while(rrQueue.length){
+        const candidate = rrQueue.shift();
+        if(candidate && candidate.state === 'READY'){
+          t = candidate;
+          break;
+        }
+      }
+      if(!t){
+        rrQueue = threads.filter(x=>x.state === 'READY');
+        continue;
+      }
+    } else {
+      const readyThreads = threads.filter(x=>x.state === 'READY');
+      t = pickNextThread(algorithm, readyThreads);
+      if(!t){
+        await sleep(40);
+        continue;
+      }
+    }
 
     // RUNNING
     updateThreadState(t.id, 'RUNNING');
@@ -2000,14 +2122,19 @@ async function startSimulation(){
     document.getElementById('cpuThread').textContent = `T${t.id} — ${t.type.toUpperCase()} ₹${fmt(t.amount)}`;
     document.getElementById('lockStatus').textContent = 'HELD';
     document.getElementById('lockStatus').style.color = 'var(--amber)';
-    addLog(`<span class="hi">T${t.id}</span> dispatched to CPU — <span class="hi-${t.type==='deposit'?'green':'amber'}">${t.type.toUpperCase()} ₹${fmt(t.amount)}</span>`, 'scheduler');
+    addLog(`<span class="hi">T${t.id}</span> dispatched to CPU — <span class="hi-${t.type==='deposit'?'green':'amber'}">${t.type.toUpperCase()} ₹${fmt(t.amount)}</span> | remaining: ${getRemainingMs(t)}ms`, 'scheduler');
 
-    const runTime = Math.min(quantum, t.processingTime - (t.elapsed||0));
+    const runTime = getSliceDuration(t, algorithm, quantum);
     const stopCpuProgress = animateCpuProgress(runTime);
     totalBusyMs += runTime;
     addGanttCell(t.id, t.colorIdx);
     await sleep(50);
     await waitWhilePaused();
+
+    if(!isRunning){
+      stopCpuProgress();
+      break;
+    }
 
     contextSwitches++;
     showToast(`Context Switch #${contextSwitches}`, 'info', 1500);
@@ -2016,9 +2143,14 @@ async function startSimulation(){
     await sleep(runTime);
     await waitWhilePaused();
 
+    if(!isRunning){
+      stopCpuProgress();
+      break;
+    }
+
     stopCpuProgress();
 
-    t.elapsed = (t.elapsed||0) + quantum;
+    t.elapsed = (t.elapsed||0) + runTime;
 
     if(t.elapsed >= t.processingTime){
       // EXECUTE transaction
@@ -2043,10 +2175,12 @@ async function startSimulation(){
       updateThreadState(t.id, 'DONE');
       completedCount++;
     } else {
-      // re-queue
+      // Preempt and re-queue/reschedule
       updateThreadState(t.id, 'READY');
-      queue.push(t);
-      addLog(`T${t.id} quantum expired — re-queued (${t.elapsed}/${t.processingTime}ms done)`, 'scheduler');
+      if(algorithm === 'rr'){
+        rrQueue.push(t);
+      }
+      addLog(`T${t.id} slice ended — preempted (${t.elapsed}/${t.processingTime}ms done)`, 'scheduler');
     }
 
     document.getElementById('lockStatus').textContent = 'FREE';
@@ -2067,7 +2201,7 @@ async function startSimulation(){
   document.getElementById('runBtn').disabled = false;
   document.getElementById('runBtn').textContent = '▶  RUN SIMULATION';
   document.getElementById('runBtn').onclick = startSimulation;
-  addLog(`Simulation complete — <span class="hi-green">${completedCount} threads</span> finished | <span class="hi">${contextSwitches} context switches</span>`, 'sys');
+  addLog(`Simulation complete — <span class="hi">${algorithmLabel}</span> | <span class="hi-green">${completedCount} threads</span> finished | <span class="hi">${contextSwitches} context switches</span>`, 'sys');
   showToast('Simulation Complete', 'success', 3000);
 
   // Save to history
@@ -2079,7 +2213,9 @@ async function startSimulation(){
     contextSwitches: contextSwitches,
     timeTaken: timeTaken,
     timestamp: new Date().toLocaleTimeString('en-GB', {hour12: false}),
-    completedThreads: completedCount
+    completedThreads: completedCount,
+    algorithm: algorithm,
+    algorithmLabel: algorithmLabel
   };
   simulationHistory.push(historyEntry);
   renderHistory();
@@ -2442,9 +2578,9 @@ function ensureThreadsVisible(){
   if(threads.length > 0) return;
 
   threads = [
-    {id: 1, type: 'deposit', amount: 500, processingTime: 600, state: 'READY', colorIdx: 0},
-    {id: 2, type: 'deposit', amount: 300, processingTime: 700, state: 'READY', colorIdx: 1},
-    {id: 3, type: 'withdraw', amount: 200, processingTime: 500, state: 'READY', colorIdx: 2},
+    {id: 1, type: 'deposit', amount: 500, processingTime: 600, priority: 3, elapsed: 0, state: 'READY', colorIdx: 0},
+    {id: 2, type: 'deposit', amount: 300, processingTime: 700, priority: 4, elapsed: 0, state: 'READY', colorIdx: 1},
+    {id: 3, type: 'withdraw', amount: 200, processingTime: 500, priority: 2, elapsed: 0, state: 'READY', colorIdx: 2},
   ];
   threadIdCounter = 4;
 
@@ -2468,6 +2604,13 @@ updateCpuRing(0);
 renderHistory();
 autoLoadDefaultThreads();
 setTimeout(ensureThreadsVisible, 0);
+
+document.getElementById('schedulerAlgo').addEventListener('change', ()=>{
+  renderQueue();
+  if(!isRunning){
+    addLog(`Scheduler mode set to <span class="hi">${getAlgorithmLabel(getSelectedAlgorithm())}</span>.`, 'sys');
+  }
+});
 </script>
 </body>
 </html>
