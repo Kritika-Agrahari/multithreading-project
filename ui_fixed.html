@@ -1702,6 +1702,7 @@ function loadPreset(presetName){
 
   if(!preset) return;
 
+  // Clear thread list DOM before adding new items
   document.getElementById('threadList').innerHTML = '';
 
   // Add all transactions
@@ -2153,6 +2154,7 @@ function resetAll(){
   document.getElementById('cpuProgress').style.width='0%';
   document.getElementById('lockStatus').textContent='FREE';
   document.getElementById('lockStatus').style.color='var(--green)';
+  document.getElementById('threadList').innerHTML = '';
   renderQueue();
   updateMetrics();
   updateCpuRing(0);
@@ -2436,27 +2438,6 @@ function autoLoadDefaultThreads(){
   if(threads.length > 0) return;
   loadPreset('basic');
   addLog('<span class="hi">Startup preset</span>: BASIC auto-loaded.', 'sys');
-}
-
-function ensureThreadsVisible(){
-  if(threads.length > 0) return;
-
-  threads = [
-    {id: 1, type: 'deposit', amount: 500, processingTime: 600, state: 'READY', colorIdx: 0},
-    {id: 2, type: 'deposit', amount: 300, processingTime: 700, state: 'READY', colorIdx: 1},
-    {id: 3, type: 'withdraw', amount: 200, processingTime: 500, state: 'READY', colorIdx: 2},
-  ];
-  threadIdCounter = 4;
-
-  const startBal = parseInt(document.getElementById('initBalance').value) || 5000;
-  initialBalance = startBal;
-  currentBalance = startBal;
-  updateBalance(startBal, 0);
-
-  renderThreadList();
-  renderQueue();
-  updateMetrics();
-  addLog('<span class="hi">Startup fallback</span>: default threads preloaded.', 'sys');
 }
 
 // ──────────────────────────────────────────────────
