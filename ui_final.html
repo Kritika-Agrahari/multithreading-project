@@ -1084,6 +1084,10 @@ body.sim-paused .state-RUNNING{
         <div class="ctrl-label">Processing Time (ms)</div>
         <input class="ctrl-input" type="number" id="txnTime" value="800" />
       </div>
+      <div class="ctrl-row" id="priorityInputRow" style="display:none;">
+        <div class="ctrl-label">Priority <span style="color:var(--muted);font-size:9px;">(1 = highest)</span></div>
+        <input class="ctrl-input" type="number" id="txnPriority" value="1" min="1" max="10" />
+      </div>
       <button class="btn btn-primary" onclick="addTransaction()" style="margin-top:4px;">+ ADD TO QUEUE</button>
     </div>
 
@@ -1099,8 +1103,20 @@ body.sim-paused .state-RUNNING{
     <div class="panel">
       <div class="lbl" style="margin-bottom:10px;">Scheduler Config</div>
       <div class="ctrl-row">
+        <div class="ctrl-label">Algorithm</div>
+        <div style="display:flex;gap:6px;">
+          <button id="btn-rr" class="btn btn-sm active" onclick="selectAlgo('rr')" style="flex:1;">ROUND ROBIN</button>
+          <button id="btn-priority" class="btn btn-sm" onclick="selectAlgo('priority')" style="flex:1;">PRIORITY</button>
+        </div>
+      </div>
+      <div class="ctrl-row">
         <div class="ctrl-label">Time Quantum (ms)</div>
         <input class="ctrl-input" type="number" id="quantum" value="600" />
+      </div>
+      <div class="ctrl-row" id="priorityNote" style="display:none;">
+        <div style="font-size:10px;color:var(--amber);padding:6px 8px;background:rgba(255,179,0,0.06);border:1px solid rgba(255,179,0,0.2);border-radius:3px;line-height:1.6;">
+          ⚡ Preemptive Priority — set priority per thread (1 = highest). Higher priority interrupts lower.
+        </div>
       </div>
     </div>
 
@@ -1418,6 +1434,7 @@ let isPaused = false;
 let contextSwitches = 0;
 let completedCount = 0;
 let totalBusyMs = 0;
+let totalUiGapMs = 0;
 let simStartTime = null;
 let pausedAt = null;
 let totalPausedMs = 0;
@@ -1429,11 +1446,14 @@ let threadPreemptions = {}; // Track preemption count per thread
 let threadStateLog = {}; // Track time in each state {threadId: {state: ms}}
 let threadStateEnteredAt = {}; // Track when thread entered current state
 let simulationHistory = []; // Track all simulation runs
+let pauseResumeResolver = null;
+let cpuRingTimerId = null;
 const ganttRowEl = document.getElementById('ganttRow');
 const ganttWrapEl = ganttRowEl.parentElement;
 let ganttIsInitialized = false;
 const THREAD_COLORS = ['#00d4ff','#a78bfa','#00ff88','#ffb300','#ff4060','#fbbf24'];
 const GANTT_CLASSES = ['gt1','gt2','gt3','gt4','gt5','gt6'];
+const API_BASE = window.location.protocol.startsWith('http') ? '' : 'http://127.0.0.1:5000';
 
 // ──────────────────────────────────────────────────
 //  CLOCK
@@ -1509,6 +1529,95 @@ function createEmptyState(icon, title, desc, hint='', compact=false){
       ${hint ? `<div class="empty-hint">→ ${hint}</div>` : ''}
     </div>
   `;
+}
+
+async function callBackend(endpoint, payload={}){
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+
+  if(!res.ok){
+    throw new Error(`HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  if(!data.ok){
+    throw new Error(data.error || 'Backend request failed');
+  }
+
+  return data;
+}
+
+async function runSimulationFromBackend(quantum){
+  const payload = {
+    algorithm: selectedAlgo,
+    quantumMs: quantum,
+    initialBalance,
+    threads: threads.map(t => ({
+      id: t.id,
+      type: t.type,
+      amount: t.amount,
+      processingTime: t.processingTime,
+      priority: t.priority || 1
+    }))
+  };
+
+  return callBackend('/api/simulate', payload);
+}
+
+async function playBackendSlices(result){
+  for(const step of result.slices){
+    await waitWhilePaused();
+
+    const t = threads.find(x => x.id === step.threadId);
+    if(!t) continue;
+
+    cpuDispatch(t);
+    addLog(`<span class="hi">T${t.id}</span> dispatched by backend`, 'scheduler');
+
+    const runTime = Math.max(1, step.runMs || 1);
+    const stopBar = animateCpuProgress(runTime);
+    const runStartedAt = Date.now();
+    addGanttCell(t.id, t.colorIdx);
+
+    await sleep(runTime);
+    await waitWhilePaused();
+    stopBar();
+    totalBusyMs += Math.min(runTime, Date.now() - runStartedAt);
+
+    t.elapsed = (t.elapsed || 0) + runTime;
+
+    if(step.event === 'done'){
+      const delta = Number(step.delta || 0);
+      const nextBalance = Number(step.balanceAfter || currentBalance);
+      currentBalance = nextBalance;
+      updateBalance(currentBalance, delta);
+
+      if(delta > 0){
+        addLog(`<span class="hi-green">DEPOSIT</span> applied by backend → Balance: ₹${fmt(currentBalance)}`, 'deposit');
+      } else if(delta < 0){
+        addLog(`<span class="hi">WITHDRAW</span> applied by backend → Balance: ₹${fmt(currentBalance)}`, 'withdraw');
+      } else if(t.type === 'withdraw'){
+        addLog(`<span class="hi-red">FAILED</span> WITHDRAW ₹${fmt(t.amount)} — insufficient funds`, 'fail');
+      }
+
+      updateThreadState(t.id, 'DONE');
+      completedCount++;
+    } else {
+      updateThreadState(t.id, 'READY');
+      addLog(`T${t.id} preempted → re-queued`, 'scheduler');
+    }
+
+    cpuRelease();
+    await sleepUiGap(100);
+  }
+
+  // Align UI metrics with backend authoritative counters.
+  contextSwitches = result.contextSwitches;
+  completedCount = result.completedThreads;
+  updateMetrics();
 }
 
 // ──────────────────────────────────────────────────
@@ -1630,6 +1739,33 @@ function updateCpuRing(pct){
   document.getElementById('mCpuUtil').textContent = Math.round(clamp)+'%';
 }
 
+function getEffectiveElapsedMs(){
+  if(!simStartTime) return 0;
+  const ongoingPauseMs = (isPaused && pausedAt) ? (Date.now() - pausedAt) : 0;
+  return Math.max(0, Date.now() - simStartTime - totalPausedMs - ongoingPauseMs - totalUiGapMs);
+}
+
+function refreshCpuUtilization(){
+  const effectiveElapsed = getEffectiveElapsedMs();
+  const pct = effectiveElapsed > 0 ? Math.min(100, (totalBusyMs / effectiveElapsed) * 100) : 0;
+  updateCpuRing(pct);
+}
+
+function startCpuRingTimer(){
+  if(cpuRingTimerId) clearInterval(cpuRingTimerId);
+  cpuRingTimerId = setInterval(()=>{
+    if(!isRunning) return;
+    refreshCpuUtilization();
+  }, 200);
+}
+
+function stopCpuRingTimer(){
+  if(cpuRingTimerId){
+    clearInterval(cpuRingTimerId);
+    cpuRingTimerId = null;
+  }
+}
+
 function updateMetrics(){
   document.getElementById('mContextSw').textContent = contextSwitches;
   document.getElementById('switchCount').textContent = contextSwitches;
@@ -1641,14 +1777,27 @@ function updateMetrics(){
 // ──────────────────────────────────────────────────
 //  THREAD MANAGEMENT
 // ──────────────────────────────────────────────────
+let selectedAlgo = 'rr';
+
+function selectAlgo(algo){
+  selectedAlgo = algo;
+  // Toggle button styles
+  document.getElementById('btn-rr').classList.toggle('active', algo === 'rr');
+  document.getElementById('btn-priority').classList.toggle('active', algo === 'priority');
+  // Show/hide priority note and input
+  document.getElementById('priorityNote').style.display      = algo === 'priority' ? '' : 'none';
+  document.getElementById('priorityInputRow').style.display  = algo === 'priority' ? '' : 'none';
+}
+
 function addTransaction(){
   if(isRunning){addLog('Cannot add while simulation is running.','sys');return;}
-  const type   = document.getElementById('txnType').value;
-  const amount = parseInt(document.getElementById('txnAmount').value)||500;
-  const ptime  = parseInt(document.getElementById('txnTime').value)||800;
-  const id     = threadIdCounter++;
+  const type     = document.getElementById('txnType').value;
+  const amount   = parseInt(document.getElementById('txnAmount').value)||500;
+  const ptime    = parseInt(document.getElementById('txnTime').value)||800;
+  const priority = parseInt(document.getElementById('txnPriority').value)||1;
+  const id       = threadIdCounter++;
 
-  const thread = {id, type, amount, processingTime:ptime, state:'READY', colorIdx:(id-1)%6};
+  const thread = {id, type, amount, processingTime:ptime, priority, state:'READY', colorIdx:(id-1)%6};
   threads.push(thread);
 
   // Set initial balance from UI on first thread
@@ -1674,9 +1823,9 @@ function loadPreset(presetName){
 
   const presets = {
     basic: [
-      {type:'deposit', amount:500, time:600},
-      {type:'deposit', amount:300, time:700},
-      {type:'withdraw', amount:200, time:500}
+      {type:'deposit',  amount:500, time:600, priority:2},
+      {type:'deposit',  amount:300, time:700, priority:1},
+      {type:'withdraw', amount:200, time:500, priority:3}
     ],
     race: Array(10).fill(null).map(() => ({
       type:'deposit',
@@ -1684,12 +1833,12 @@ function loadPreset(presetName){
       time:800
     })),
     deadlock: [
-      {type:'deposit', amount:500, time:1000},
-      {type:'withdraw', amount:250, time:900},
-      {type:'deposit', amount:300, time:1100},
-      {type:'withdraw', amount:400, time:950},
-      {type:'deposit', amount:150, time:850},
-      {type:'withdraw', amount:200, time:1050}
+      {type:'deposit',  amount:500, time:1000, priority:1},
+      {type:'withdraw', amount:250, time:900,  priority:3},
+      {type:'deposit',  amount:300, time:1100, priority:2},
+      {type:'withdraw', amount:400, time:950,  priority:1},
+      {type:'deposit',  amount:150, time:850,  priority:4},
+      {type:'withdraw', amount:200, time:1050, priority:2}
     ]
   };
 
@@ -1702,7 +1851,7 @@ function loadPreset(presetName){
 
   if(!preset) return;
 
-  // Clear thread list DOM before adding new items
+  // Clear DOM before adding
   document.getElementById('threadList').innerHTML = '';
 
   // Add all transactions
@@ -1713,6 +1862,7 @@ function loadPreset(presetName){
       type: txn.type,
       amount: txn.amount,
       processingTime: txn.time,
+      priority: txn.priority || 1,
       state: 'READY',
       colorIdx: (id-1)%6
     };
@@ -1738,7 +1888,7 @@ function createThreadListItemMarkup(t){
       <div class="tid" style="background:${THREAD_COLORS[t.colorIdx]}22;color:${THREAD_COLORS[t.colorIdx]};border:1px solid ${THREAD_COLORS[t.colorIdx]}44;">T${t.id}</div>
       <div class="thread-info">
         <div class="thread-name">${t.type.toUpperCase()} ₹${fmt(t.amount)}</div>
-        <div class="thread-sub">${t.processingTime}ms proc time</div>
+        <div class="thread-sub">${t.processingTime}ms · P${t.priority||1}</div>
       </div>
       <div class="state-pill state-${t.state}" id="thread-state-T${t.id}">${t.state}</div>
     </div>
@@ -1772,7 +1922,7 @@ function renderThreadList(){
       <div class="tid" style="background:${THREAD_COLORS[t.colorIdx]}22;color:${THREAD_COLORS[t.colorIdx]};border:1px solid ${THREAD_COLORS[t.colorIdx]}44;">T${t.id}</div>
       <div class="thread-info">
         <div class="thread-name">${t.type.toUpperCase()} ₹${fmt(t.amount)}</div>
-        <div class="thread-sub">${t.processingTime}ms proc time</div>
+        <div class="thread-sub">${t.processingTime}ms · P${t.priority||1}</div>
       </div>
       <div class="state-pill state-${t.state}" id="thread-state-T${t.id}">${t.state}</div>
     </div>
@@ -1973,8 +2123,10 @@ async function startSimulation(){
   isPaused = false;
   pausedAt = null;
   totalPausedMs = 0;
+  totalUiGapMs = 0;
   contextSwitches = 0; completedCount = 0; totalBusyMs = 0;
   simStartTime = Date.now();
+  startCpuRingTimer();
   currentBalance = initialBalance = parseInt(document.getElementById('initBalance').value)||5000;
   updateBalance(currentBalance, 0);
   ganttRowEl.innerHTML = '';
@@ -1984,11 +2136,110 @@ async function startSimulation(){
   document.getElementById('runBtn').textContent = '⏸  PAUSE';
   document.getElementById('runBtn').onclick = togglePauseSimulation;
 
-  // Set all to READY
   const quantum = parseInt(document.getElementById('quantum').value)||600;
-  const queue = [...threads];
 
-  addLog(`Scheduler started — <span class="hi">Round Robin</span> | quantum: <span class="hi">${quantum}ms</span>`, 'scheduler');
+  // Reset all thread state
+  threads.forEach(t => { t.elapsed = 0; t.state = 'READY'; });
+  renderThreadList();
+
+  if(selectedAlgo === 'rr'){
+    addLog(`Scheduler: <span class="hi">Round Robin</span> | quantum: <span class="hi">${quantum}ms</span>`, 'scheduler');
+  } else {
+    addLog(`Scheduler: <span class="hi">Preemptive Priority</span> | quantum: <span class="hi">${quantum}ms</span>`, 'scheduler');
+  }
+
+  let usedBackend = false;
+  try {
+    const backendResult = await runSimulationFromBackend(quantum);
+    usedBackend = true;
+    await playBackendSlices(backendResult);
+  } catch (err) {
+    addLog('Backend unreachable. Falling back to browser simulation.', 'sys');
+    showToast('Backend offline. Using local simulator.', 'warning', 2200);
+
+    if(selectedAlgo === 'rr'){
+      await runRoundRobin(quantum);
+    } else {
+      await runPriority(quantum);
+    }
+  }
+
+  // ── Wrap up ──
+  document.getElementById('cpuThread').textContent = '— IDLE —';
+  isRunning = false;
+  isPaused = false;
+  stopCpuRingTimer();
+  refreshCpuUtilization();
+  document.getElementById('runBtn').disabled = false;
+  document.getElementById('runBtn').textContent = '▶  RUN SIMULATION';
+  document.getElementById('runBtn').onclick = startSimulation;
+  addLog(`Simulation complete — <span class="hi-green">${completedCount} threads</span> finished | <span class="hi">${contextSwitches} context switches</span>`, 'sys');
+  if(usedBackend){
+    addLog('Results synchronized with backend API.', 'sys');
+  }
+  showToast('Simulation Complete', 'success', 3000);
+
+  const timeTaken = Date.now() - simStartTime - totalPausedMs;
+  simulationHistory.push({
+    runNum: simulationHistory.length + 1,
+    finalBalance: currentBalance,
+    totalThreads: threads.length,
+    contextSwitches,
+    timeTaken,
+    timestamp: new Date().toLocaleTimeString('en-GB', {hour12: false}),
+    completedThreads: completedCount
+  });
+  renderHistory();
+  updateMetrics();
+}
+
+// ─────────────────────────────────────────────────────────────
+//  SHARED HELPERS
+// ─────────────────────────────────────────────────────────────
+function executeTransaction(t){
+  let delta = 0;
+  if(t.type === 'deposit'){
+    delta = t.amount;
+    currentBalance += delta;
+    addLog(`<span class="hi-green">DEPOSIT</span> ₹${fmt(t.amount)} → Balance: ₹${fmt(currentBalance)}`, 'deposit');
+  } else {
+    if(currentBalance >= t.amount){
+      delta = -t.amount;
+      currentBalance += delta;
+      addLog(`<span class="hi">WITHDRAW</span> ₹${fmt(t.amount)} → Balance: ₹${fmt(currentBalance)}`, 'withdraw');
+    } else {
+      addLog(`<span class="hi-red">FAILED</span> WITHDRAW ₹${fmt(t.amount)} — insufficient funds`, 'fail');
+      showToast('Insufficient Balance', 'warning', 2500);
+    }
+  }
+  updateBalance(currentBalance, delta);
+}
+
+function cpuDispatch(t){
+  updateThreadState(t.id, 'RUNNING');
+  removeThreadFromQueue(t.id);
+  document.getElementById('cpuThread').textContent = `T${t.id} — ${t.type.toUpperCase()} ₹${fmt(t.amount)}`;
+  document.getElementById('lockStatus').textContent = 'HELD';
+  document.getElementById('lockStatus').style.color = 'var(--amber)';
+}
+
+function cpuRelease(){
+  document.getElementById('lockStatus').textContent = 'FREE';
+  document.getElementById('lockStatus').style.color = 'var(--green)';
+  contextSwitches++;
+  showToast(`Context Switch #${contextSwitches}`, 'info', 1200);
+  refreshCpuUtilization();
+  updateMetrics();
+}
+
+// ─────────────────────────────────────────────────────────────
+//  ALGO 1 — ROUND ROBIN
+//  Each thread gets a fixed time quantum in cyclic order.
+//  If not done within quantum → re-queued at the back.
+//  Preemptive and fair — no thread starves.
+// ─────────────────────────────────────────────────────────────
+async function runRoundRobin(quantum){
+  const queue = [...threads];
 
   while(queue.length > 0){
     await waitWhilePaused();
@@ -1996,105 +2247,130 @@ async function startSimulation(){
     const t = queue.shift();
     if(t.state === 'DONE') continue;
 
-    // RUNNING
-    updateThreadState(t.id, 'RUNNING');
-    removeThreadFromQueue(t.id);
-    document.getElementById('cpuThread').textContent = `T${t.id} — ${t.type.toUpperCase()} ₹${fmt(t.amount)}`;
-    document.getElementById('lockStatus').textContent = 'HELD';
-    document.getElementById('lockStatus').style.color = 'var(--amber)';
-    addLog(`<span class="hi">T${t.id}</span> dispatched to CPU — <span class="hi-${t.type==='deposit'?'green':'amber'}">${t.type.toUpperCase()} ₹${fmt(t.amount)}</span>`, 'scheduler');
+    // ── Dispatch thread to CPU ──
+    cpuDispatch(t);
+    addLog(`<span class="hi">T${t.id}</span> dispatched — RR quantum <span class="hi">${quantum}ms</span>`, 'scheduler');
 
-    const runTime = Math.min(quantum, t.processingTime - (t.elapsed||0));
-    const stopCpuProgress = animateCpuProgress(runTime);
-    totalBusyMs += runTime;
+    // ── Run for min(quantum, remaining time) ──
+    const remaining = t.processingTime - (t.elapsed || 0);
+    const runTime   = Math.min(quantum, remaining);
+    const stopBar   = animateCpuProgress(runTime);
+    const runStartedAt = Date.now();
     addGanttCell(t.id, t.colorIdx);
-    await sleep(50);
-    await waitWhilePaused();
-
-    contextSwitches++;
-    showToast(`Context Switch #${contextSwitches}`, 'info', 1500);
-    updateMetrics();
 
     await sleep(runTime);
     await waitWhilePaused();
+    stopBar();
+    totalBusyMs += Math.min(runTime, Date.now() - runStartedAt);
 
-    stopCpuProgress();
-
-    t.elapsed = (t.elapsed||0) + quantum;
+    t.elapsed = (t.elapsed || 0) + runTime;
 
     if(t.elapsed >= t.processingTime){
-      // EXECUTE transaction
-      let delta = 0;
-      let success = true;
-      if(t.type === 'deposit'){
-        delta = t.amount;
-        currentBalance += delta;
-        addLog(`<span class="hi-green">DEPOSIT</span> ₹${fmt(t.amount)} → Balance: ₹${fmt(currentBalance)}`, 'deposit');
-      } else {
-        if(currentBalance >= t.amount){
-          delta = -t.amount;
-          currentBalance += delta;
-          addLog(`<span class="hi">WITHDRAW</span> ₹${fmt(t.amount)} → Balance: ₹${fmt(currentBalance)}`, 'withdraw');
-        } else {
-          success = false;
-          addLog(`<span class="hi-red">FAILED</span> WITHDRAW ₹${fmt(t.amount)} — insufficient funds`, 'fail');
-          showToast('Insufficient Balance', 'warning', 2500);
-        }
-      }
-      updateBalance(currentBalance, delta);
+      // ── Thread finished ──
+      executeTransaction(t);
       updateThreadState(t.id, 'DONE');
       completedCount++;
+      addLog(`T${t.id} <span class="hi-green">TERMINATED</span>`, 'scheduler');
     } else {
-      // re-queue
+      // ── Preempted — put back at end of queue ──
       updateThreadState(t.id, 'READY');
       queue.push(t);
-      addLog(`T${t.id} quantum expired — re-queued (${t.elapsed}/${t.processingTime}ms done)`, 'scheduler');
+      addLog(`T${t.id} preempted → re-queued | done: ${t.elapsed}ms / ${t.processingTime}ms`, 'scheduler');
     }
 
-    document.getElementById('lockStatus').textContent = 'FREE';
-    document.getElementById('lockStatus').style.color = 'var(--green)';
-
-    // CPU utilization (adjusted for paused time)
-    const elapsed = Date.now() - simStartTime - totalPausedMs;
-    updateCpuRing(elapsed > 0 ? Math.min(100,(totalBusyMs/elapsed)*100) : 0);
-    updateMetrics();
-
-    await sleep(120);
+    cpuRelease();
+    await sleepUiGap(120);
     await waitWhilePaused();
   }
+}
 
-  document.getElementById('cpuThread').textContent = '— IDLE —';
-  isRunning = false;
-  isPaused = false;
-  document.getElementById('runBtn').disabled = false;
-  document.getElementById('runBtn').textContent = '▶  RUN SIMULATION';
-  document.getElementById('runBtn').onclick = startSimulation;
-  addLog(`Simulation complete — <span class="hi-green">${completedCount} threads</span> finished | <span class="hi">${contextSwitches} context switches</span>`, 'sys');
-  showToast('Simulation Complete', 'success', 3000);
+// ─────────────────────────────────────────────────────────────
+//  ALGO 2 — PREEMPTIVE PRIORITY SCHEDULING
+//  At every quantum, the thread with the HIGHEST priority
+//  (lowest priority number) runs next — even if it means
+//  interrupting a currently running thread.
+//  Equal priority → FIFO within that level.
+// ─────────────────────────────────────────────────────────────
+async function runPriority(quantum){
+  // Track remaining processing time per thread
+  const remaining = {};
+  threads.forEach(t => remaining[t.id] = t.processingTime);
+  const done = new Set();
 
-  // Save to history
-  const timeTaken = Date.now() - simStartTime - totalPausedMs;
-  const historyEntry = {
-    runNum: simulationHistory.length + 1,
-    finalBalance: currentBalance,
-    totalThreads: threads.length,
-    contextSwitches: contextSwitches,
-    timeTaken: timeTaken,
-    timestamp: new Date().toLocaleTimeString('en-GB', {hour12: false}),
-    completedThreads: completedCount
-  };
-  simulationHistory.push(historyEntry);
-  renderHistory();
+  addLog('Priority order: ' + [...threads]
+    .sort((a,b) => (a.priority||1) - (b.priority||1))
+    .map(t => `T${t.id}(P${t.priority||1})`).join(' → '), 'scheduler');
 
-  updateMetrics();
+  while(done.size < threads.length){
+    await waitWhilePaused();
+
+    // ── Always pick highest-priority undone thread ──
+    const candidates = threads.filter(t => !done.has(t.id) && remaining[t.id] > 0);
+    if(!candidates.length) break;
+
+    // Sort by priority (1 = highest), tie-break by id (FIFO)
+    candidates.sort((a,b) => {
+      const pa = a.priority || 1;
+      const pb = b.priority || 1;
+      return pa !== pb ? pa - pb : a.id - b.id;
+    });
+    const t = candidates[0];
+
+    // ── Dispatch ──
+    cpuDispatch(t);
+    addLog(`<span class="hi">T${t.id}</span> dispatched — Priority <span class="hi">${t.priority||1}</span> | remaining: ${remaining[t.id]}ms`, 'scheduler');
+
+    const runTime = Math.min(quantum, remaining[t.id]);
+    const stopBar = animateCpuProgress(runTime);
+    const runStartedAt = Date.now();
+    addGanttCell(t.id, t.colorIdx);
+
+    await sleep(runTime);
+    await waitWhilePaused();
+    stopBar();
+    totalBusyMs += Math.min(runTime, Date.now() - runStartedAt);
+
+    remaining[t.id] -= runTime;
+
+    if(remaining[t.id] <= 0){
+      // ── Thread finished ──
+      done.add(t.id);
+      executeTransaction(t);
+      updateThreadState(t.id, 'DONE');
+      completedCount++;
+      addLog(`T${t.id} <span class="hi-green">TERMINATED</span> (Priority ${t.priority||1})`, 'scheduler');
+    } else {
+      // ── Preempted — another higher-priority thread may take over next ──
+      updateThreadState(t.id, 'READY');
+      addLog(`T${t.id} preempted | remaining: ${remaining[t.id]}ms`, 'scheduler');
+    }
+
+    cpuRelease();
+    await sleepUiGap(120);
+    await waitWhilePaused();
+  }
 }
 
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
-async function waitWhilePaused(){
-  while(isPaused){
-    await sleep(50);
+async function sleepUiGap(ms){
+  const startedAt = Date.now();
+  await sleep(ms);
+  totalUiGapMs += Date.now() - startedAt;
+}
+
+function releasePauseWaiters(){
+  if(pauseResumeResolver){
+    pauseResumeResolver();
+    pauseResumeResolver = null;
   }
+}
+
+async function waitWhilePaused(){
+  if(!isPaused) return;
+  await new Promise(resolve => {
+    pauseResumeResolver = resolve;
+  });
 }
 
 function togglePauseSimulation(){
@@ -2103,6 +2379,7 @@ function togglePauseSimulation(){
   if(isPaused){
     // RESUME
     isPaused = false;
+    releasePauseWaiters();
     totalPausedMs += Date.now() - pausedAt;
     document.getElementById('runBtn').textContent = '⏸  PAUSE';
     document.body.classList.remove('sim-paused');
@@ -2132,8 +2409,11 @@ function togglePauseSimulation(){
 
 function resetAll(){
   if(isRunning){ isRunning=false; isPaused=false; }
+  releasePauseWaiters();
+  stopCpuRingTimer();
   threads = []; threadIdCounter = 1;
   contextSwitches = 0; completedCount = 0; totalBusyMs = 0;
+  totalUiGapMs = 0;
   pausedAt = null; totalPausedMs = 0;
   threadPreemptions = {};
   threadStateLog = {};
@@ -2174,6 +2454,49 @@ function clearLog(){ document.getElementById('logFeed').innerHTML=''; }
 //  SYNC DEMO
 // ──────────────────────────────────────────────────
 async function runSyncDemo(){
+  // Try real backend synchronization demo first.
+  try {
+    const result = await callBackend('/api/sync-demo', {});
+
+    const expected = Number(result.expected || 2000);
+    const unsafeResult = Number(result.unsafe || 0);
+    const safeResult = Number(result.safe || expected);
+    const lost = Math.max(0, expected - unsafeResult);
+
+    document.getElementById('unsafeVal').textContent=`₹ ${unsafeResult}`;
+    document.getElementById('safeVal').textContent=`₹ ${safeResult}`;
+    document.getElementById('bar-unsafe').style.width=(unsafeResult/expected*100)+'%';
+    document.getElementById('bar-safe').style.width=(safeResult/expected*100)+'%';
+    document.getElementById('bar-unsafe-lbl').textContent=`₹${unsafeResult}`;
+    document.getElementById('bar-safe-lbl').textContent=`₹${safeResult}`;
+    document.getElementById('safeSub').textContent='₹'+safeResult+' — always correct';
+    document.getElementById('unsafeSub').textContent='₹'+unsafeResult+' — may be wrong';
+    document.getElementById('syncVerdict').innerHTML=
+      unsafeResult < expected
+        ? `<span style="color:var(--red);">RACE CONDITION: ₹${lost} lost to overwrites.</span> Lock prevents this completely.`
+        : `<span style="color:var(--green);">No race condition this run.</span> Safe lock run remained correct.`;
+
+    const lockViz = document.getElementById('lockViz');
+    lockViz.innerHTML = `
+      <div style="font-size:11px;color:var(--muted);line-height:1.7;">
+        Backend demo executed 10 concurrent deposits on both unsafe and safe accounts.<br>
+        Unsafe result: <span style="color:var(--red);">₹${unsafeResult}</span><br>
+        Safe result: <span style="color:var(--green);">₹${safeResult}</span>
+      </div>
+    `;
+
+    if(unsafeResult < expected){
+      showToast('Race Condition Detected (Backend)', 'error', 3000);
+    } else {
+      showToast('Backend Sync Demo Complete', 'success', 2500);
+    }
+
+    addLog('Synchronization demo fetched from backend API.', 'sys');
+    return;
+  } catch (err) {
+    addLog('Backend sync demo unavailable. Running local animation.', 'sys');
+  }
+
   document.getElementById('syncBtn').disabled=true;
   document.getElementById('syncBtn').textContent='⏳ RUNNING...';
   document.getElementById('unsafeVal').textContent='₹ ...';
@@ -2360,6 +2683,8 @@ document.addEventListener('keydown', (e)=>{
         e.preventDefault();
         isRunning = false;
         isPaused = false;
+        releasePauseWaiters();
+        stopCpuRingTimer();
         document.getElementById('runBtn').disabled = false;
         document.getElementById('runBtn').textContent = '▶  RUN SIMULATION';
         document.getElementById('runBtn').onclick = startSimulation;
@@ -2438,6 +2763,27 @@ function autoLoadDefaultThreads(){
   if(threads.length > 0) return;
   loadPreset('basic');
   addLog('<span class="hi">Startup preset</span>: BASIC auto-loaded.', 'sys');
+}
+
+function ensureThreadsVisible(){
+  if(threads.length > 0) return;
+
+  threads = [
+    {id: 1, type: 'deposit', amount: 500, processingTime: 600, state: 'READY', colorIdx: 0},
+    {id: 2, type: 'deposit', amount: 300, processingTime: 700, state: 'READY', colorIdx: 1},
+    {id: 3, type: 'withdraw', amount: 200, processingTime: 500, state: 'READY', colorIdx: 2},
+  ];
+  threadIdCounter = 4;
+
+  const startBal = parseInt(document.getElementById('initBalance').value) || 5000;
+  initialBalance = startBal;
+  currentBalance = startBal;
+  updateBalance(startBal, 0);
+
+  renderThreadList();
+  renderQueue();
+  updateMetrics();
+  addLog('<span class="hi">Startup fallback</span>: default threads preloaded.', 'sys');
 }
 
 // ──────────────────────────────────────────────────

@@ -90,13 +90,39 @@ A lock is used to ensure only one thread modifies the balance at a time, prevent
 ## 🚀 How to Run
 
 1. Open terminal in project folder
-2. Run:
+2. Install dependencies:
 
 ```bash
-python ui_final.py
+pip install -r requirements.txt
 ```
 
-3. Click **Start Simulation** in the GUI
+3. Run the integrated backend + frontend server:
+
+```bash
+python backend_server.py
+```
+
+4. Open in browser:
+
+```text
+http://127.0.0.1:5000
+```
+
+5. Click **Start Simulation** in the GUI
+
+## 🧩 API Endpoints
+
+* `POST /api/simulate` → runs scheduler simulation from frontend payload
+* `POST /api/sync-demo` → runs race-condition and lock demo
+* `GET /api/health` → health check
+
+## 🖥️ Legacy Console Run
+
+To run console demos only:
+
+```bash
+python main.py
+```
 
 ---
 
