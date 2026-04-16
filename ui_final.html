@@ -1120,6 +1120,17 @@ body.sim-paused .state-RUNNING{
           ⚡ Preemptive Priority — set priority per thread (1 = highest). Higher priority interrupts lower.
         </div>
       </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Account-Transaction Relationship</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button id="rel-one-to-one" class="btn btn-sm" onclick="selectRelationship('one_to_one')" style="flex:1;">1-to-1</button>
+          <button id="rel-one-to-many" class="btn btn-sm active" onclick="selectRelationship('one_to_many')" style="flex:1;">1-to-M</button>
+          <button id="rel-many-to-one" class="btn btn-sm" onclick="selectRelationship('many_to_one')" style="flex:1;">M-to-1</button>
+        </div>
+        <div style="font-size:9px;color:var(--muted);padding:6px 0;line-height:1.5;">
+          <span id="rel-desc">1-to-Many: One account accepts multiple transactions</span>
+        </div>
+      </div>
     </div>
 
     <!-- Simulation Controls -->
@@ -1442,6 +1453,7 @@ let simEndTime = null;
 let pausedAt = null;
 let totalPausedMs = 0;
 let currentBalance = 5000;
+let relationshipMode = 'one_to_many';
 let initialBalance = 5000;
 let lockHeld = false;
 let ganttData = [];
@@ -2799,6 +2811,22 @@ updateMetrics();
 updateCpuRing(0);
 renderHistory();
 autoLoadDefaultThreads();
+// Relationship Mode Selector
+function selectRelationship(mode) {
+  relationshipMode = mode;
+  document.getElementById('rel-one-to-one').classList.remove('active');
+  document.getElementById('rel-one-to-many').classList.remove('active');
+  document.getElementById('rel-many-to-one').classList.remove('active');
+  document.getElementById(`rel-${mode.replace(/_/g, '-')}`).classList.add('active');
+  
+  const descMap = {
+    'one_to_one': '1-to-1: Each account can only accept one transaction',
+    'one_to_many': '1-to-Many: One account accepts multiple transactions',
+    'many_to_one': 'M-to-1: Many transactions mapped to one account'
+  };
+  document.getElementById('rel-desc').textContent = descMap[mode] || '';
+  addLog(`📊 Relationship mode: ${mode.toUpperCase()}`);
+}
 </script>
 </body>
 </html>
